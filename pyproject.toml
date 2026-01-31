@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "clippervx"
+version = "1.0.0"
+description = "YouTube to Shorts/Reels automation tool"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "yt-dlp>=2024.1.0",
+    "faster-whisper>=0.10.0",
+    "openai>=1.0.0",
+    "google-generativeai>=0.3.0",
+    "typer>=0.9.0",
+    "rich>=13.0.0",
+    "pydantic>=2.0.0",
+    "pyyaml>=6.0",
+    "webvtt-py>=0.4.6",
+]
+
+[project.scripts]
+clipper = "clipper.cli:app"
+
+[tool.setuptools.packages.find]
+where = ["."]

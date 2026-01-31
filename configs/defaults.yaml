@@ -1,0 +1,35 @@
+# Default Configuration
+output_dir: "./output"
+temp_dir: "./temp"
+
+# Video settings
+target_width: 1080
+target_height: 1920
+aspect_ratio: "9:16"
+
+# Clip settings
+default_clips: 3
+min_clip_length: 15
+max_clip_length: 60
+
+# LLM settings
+llm_provider: "gemini"  # gemini or openai
+llm_model: "gemini-2.5-flash"
+openai_model: "gpt-4o-mini"
+
+# Whisper settings
+whisper_model: "base"  # tiny, base, small, medium, large
+
+# Caption styling
+caption_font: "Komika Axis"
+caption_fontsize: 72
+caption_color: "&H00FFFFFF"
+caption_outline_color: "&H00000000"
+caption_outline_width: 4
+caption_shadow_depth: 2
+caption_margin_v: 400
+
+# FFmpeg settings
+ffmpeg_preset: "medium"
+ffmpeg_crf: 18
+audio_bitrate: "192k"
