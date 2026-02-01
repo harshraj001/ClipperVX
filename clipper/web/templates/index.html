@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ClipperVX - YouTube to Shorts/Reels</title>
+    <link rel="stylesheet" href="/static/css/crystalline.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+        rel="stylesheet">
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="logo">
+                <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+                    <rect width="32" height="32" rx="8" fill="currentColor" fill-opacity="0.1" />
+                    <path d="M10 8L22 16L10 24V8Z" fill="var(--accent)" />
+                </svg>
+                <span class="logo-text">ClipperVX</span>
+            </div>
+            <div class="header-actions">
+                <button class="btn-icon" id="theme-toggle" title="Toggle theme">
+                    <svg class="icon-sun" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        stroke-width="2">
+                        <circle cx="12" cy="12" r="5" />
+                        <path
+                            d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
+                    </svg>
+                    <svg class="icon-moon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        stroke-width="2">
+                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+                    </svg>
+                </button>
+                <button class="btn-icon" id="settings-btn" title="Settings">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="3" />
+                        <path
+                            d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                    </svg>
+                </button>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Source Selection Tabs -->
+            <section class="source-tabs card">
+                <div class="tabs">
+                    <button class="tab active" data-tab="youtube">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                            <path
+                                d="M23.5 6.19a3.02 3.02 0 0 0-2.12-2.14C19.54 3.5 12 3.5 12 3.5s-7.54 0-9.38.55A3.02 3.02 0 0 0 .5 6.19 31.7 31.7 0 0 0 0 12a31.7 31.7 0 0 0 .5 5.81 3.02 3.02 0 0 0 2.12 2.14c1.84.55 9.38.55 9.38.55s7.54 0 9.38-.55a3.02 3.02 0 0 0 2.12-2.14A31.7 31.7 0 0 0 24 12a31.7 31.7 0 0 0-.5-5.81zM9.54 15.57V8.43L15.82 12l-6.28 3.57z" />
+                        </svg>
+                        YouTube URL
+                    </button>
+                    <button class="tab" data-tab="local">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" />
+                        </svg>
+                        Local File
+                    </button>
+                </div>
+
+                <!-- YouTube Input -->
+                <div class="tab-content active" id="youtube-tab">
+                    <div class="input-group">
+                        <input type="text" id="url-input" class="url-input" placeholder="Paste YouTube URL here...">
+                        <button class="btn-primary" id="fetch-btn">
+                            <span>Fetch</span>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <path d="M5 12h14M12 5l7 7-7 7" />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Local File Upload -->
+                <div class="tab-content" id="local-tab">
+                    <div class="upload-zone" id="upload-zone">
+                        <input type="file" id="file-input" accept="video/*" hidden>
+                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="1.5">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" />
+                        </svg>
+                        <p>Drag & drop video file here</p>
+                        <span>or click to browse</span>
+                    </div>
+                    <div class="upload-progress hidden" id="upload-progress">
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="upload-fill"></div>
+                        </div>
+                        <span id="upload-status">Uploading...</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Video Info Section -->
+            <section class="video-info card hidden" id="video-info">
+                <div class="video-preview">
+                    <img id="video-thumbnail" src="" alt="Video thumbnail">
+                    <div class="video-duration" id="video-duration">0:00</div>
+                </div>
+                <div class="video-details">
+                    <h2 id="video-title">Video Title</h2>
+                    <div class="video-meta">
+                        <span class="video-id" id="video-id-display">ID: ---</span>
+                        <span class="video-source" id="video-source"></span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Options Section -->
+            <section class="options-section card hidden" id="options-section">
+                <h3 class="section-title">OPTIONS</h3>
+                <div class="bento-grid">
+                    <div class="option-card" id="quality-option">
+                        <label class="option-label">Quality</label>
+                        <select id="quality-select" class="select-input">
+                            <option value="best">Best Available</option>
+                        </select>
+                    </div>
+                    <div class="option-card">
+                        <label class="option-label">Clips</label>
+                        <input type="number" id="clips-count" class="number-input" value="3" min="1" max="10">
+                    </div>
+                    <div class="option-card">
+                        <label class="option-label">Min Length</label>
+                        <input type="number" id="min-length" class="number-input" value="15" min="5" max="60">
+                        <span class="unit">sec</span>
+                    </div>
+                    <div class="option-card">
+                        <label class="option-label">Max Length</label>
+                        <input type="number" id="max-length" class="number-input" value="60" min="15" max="120">
+                        <span class="unit">sec</span>
+                    </div>
+                </div>
+                <button class="btn-primary btn-large" id="process-btn">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polygon points="5 3 19 12 5 21 5 3" />
+                    </svg>
+                    <span>Generate Clips</span>
+                </button>
+            </section>
+
+            <!-- Progress Section -->
+            <section class="progress-section card hidden" id="progress-section">
+                <h3 class="section-title">PROCESSING</h3>
+                <div class="progress-container">
+                    <div class="progress-stage" id="progress-stage">Initializing...</div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progress-fill" style="width: 0%"></div>
+                    </div>
+                    <div class="progress-percent" id="progress-percent">0%</div>
+                </div>
+                <div class="progress-log" id="progress-log"></div>
+            </section>
+
+            <!-- Results Section -->
+            <section class="results-section card hidden" id="results-section">
+                <h3 class="section-title">GENERATED CLIPS</h3>
+                <div class="clips-grid" id="clips-grid"></div>
+            </section>
+        </main>
+
+        <!-- Settings Modal -->
+        <div class="modal-overlay hidden" id="settings-modal">
+            <div class="modal card">
+                <div class="modal-header">
+                    <h3>Settings</h3>
+                    <button class="btn-icon modal-close" id="settings-close">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M18 6L6 18M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="setting-group">
+                        <label class="setting-label">GEMINI API KEY</label>
+                        <input type="password" id="gemini-key" class="text-input"
+                            placeholder="Enter your Gemini API key">
+                        <p class="setting-hint">Required for AI-powered clip selection</p>
+                    </div>
+                    <div class="setting-group">
+                        <label class="setting-label">OPENAI API KEY</label>
+                        <input type="password" id="openai-key" class="text-input"
+                            placeholder="Enter your OpenAI API key (optional)">
+                        <p class="setting-hint">Alternative to Gemini</p>
+                    </div>
+                    <div class="setting-group">
+                        <label class="setting-label">LLM PROVIDER</label>
+                        <select id="llm-provider" class="select-input">
+                            <option value="gemini">Gemini</option>
+                            <option value="openai">OpenAI</option>
+                            <option value="none">Heuristic Only (No AI)</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn-secondary" id="settings-cancel">Cancel</button>
+                    <button class="btn-primary" id="settings-save">Save Settings</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Connection Status -->
+        <div class="connection-status" id="connection-status">
+            <span class="status-dot"></span>
+            <span class="status-text">Connecting...</span>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+
+</html>
