@@ -183,24 +183,39 @@
                 </div>
                 <div class="modal-body">
                     <div class="setting-group">
-                        <label class="setting-label">GEMINI API KEY</label>
-                        <input type="password" id="gemini-key" class="text-input"
-                            placeholder="Enter your Gemini API key">
-                        <p class="setting-hint">Required for AI-powered clip selection</p>
-                    </div>
-                    <div class="setting-group">
-                        <label class="setting-label">OPENAI API KEY</label>
-                        <input type="password" id="openai-key" class="text-input"
-                            placeholder="Enter your OpenAI API key (optional)">
-                        <p class="setting-hint">Alternative to Gemini</p>
-                    </div>
-                    <div class="setting-group">
                         <label class="setting-label">LLM PROVIDER</label>
                         <select id="llm-provider" class="select-input">
-                            <option value="gemini">Gemini</option>
+                            <option value="antigravity">Antigravity (Claude/Gemini)</option>
+                            <option value="gemini">Google Gemini</option>
                             <option value="openai">OpenAI</option>
                             <option value="none">Heuristic Only (No AI)</option>
                         </select>
+                        <p class="setting-hint" id="provider-hint">Free access to Claude & Gemini via Google OAuth</p>
+                    </div>
+                    <div class="setting-group" id="antigravity-auth-group">
+                        <label class="setting-label">ANTIGRAVITY AUTH</label>
+                        <button class="btn-secondary" id="antigravity-auth-btn" style="width: 100%;">
+                            <span id="auth-btn-text">Authenticate with Google</span>
+                        </button>
+                        <p class="setting-hint" id="auth-status">Not authenticated</p>
+                    </div>
+                    <div class="setting-group" id="model-group">
+                        <label class="setting-label">MODEL</label>
+                        <select id="llm-model" class="select-input">
+                            <option value="claude-sonnet-4-5-thinking">Claude Sonnet 4.5 (Thinking)</option>
+                        </select>
+                    </div>
+                    <div class="setting-group" id="gemini-key-group" style="display: none;">
+                        <label class="setting-label">GEMINI API KEY</label>
+                        <input type="password" id="gemini-key" class="text-input"
+                            placeholder="Enter your Gemini API key">
+                        <p class="setting-hint">Required for Google Gemini</p>
+                    </div>
+                    <div class="setting-group" id="openai-key-group" style="display: none;">
+                        <label class="setting-label">OPENAI API KEY</label>
+                        <input type="password" id="openai-key" class="text-input"
+                            placeholder="Enter your OpenAI API key">
+                        <p class="setting-hint">Required for OpenAI</p>
                     </div>
                 </div>
                 <div class="modal-footer">

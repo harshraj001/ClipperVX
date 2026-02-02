@@ -13,6 +13,37 @@ from ..utils import get_logger
 logger = get_logger(__name__)
 
 
+def _repair_json(json_str: str) -> str:
+    """Attempt to repair truncated JSON by closing open brackets/braces."""
+    # Count open brackets
+    open_braces = json_str.count('{') - json_str.count('}')
+    open_brackets = json_str.count('[') - json_str.count(']')
+    
+    # Try to find the last complete object in an array
+    if open_braces > 0 or open_brackets > 0:
+        # Find the last complete caption entry (ends with })
+        last_complete = json_str.rfind('}')
+        if last_complete > 0:
+            # Check if there's an incomplete entry after it
+            after_last = json_str[last_complete+1:].strip()
+            if after_last.startswith(','):
+                # Truncate at the last complete entry
+                json_str = json_str[:last_complete+1]
+                # Recalculate
+                open_braces = json_str.count('{') - json_str.count('}')
+                open_brackets = json_str.count('[') - json_str.count(']')
+    
+    # Close any remaining open structures
+    json_str = json_str.rstrip()
+    if json_str.endswith(','):
+        json_str = json_str[:-1]
+    
+    json_str += ']' * open_brackets
+    json_str += '}' * open_braces
+    
+    return json_str
+
+
 @dataclass
 class Caption:
     """A single caption entry."""
@@ -168,7 +199,12 @@ class CaptionGenerator:
         console = Console()
         
         if self._client is None:
-            if self.config.llm_provider == "gemini":
+            if self.config.llm_provider == "antigravity":
+                from ..llm.antigravity_client import AntigravityClient
+                self._client = AntigravityClient()
+                if not self._client.is_authenticated():
+                    self._client.authenticate()
+            elif self.config.llm_provider == "gemini":
                 from google import genai
                 self._client = genai.Client(api_key=self.config.get_api_key())
             else:
@@ -180,13 +216,19 @@ class CaptionGenerator:
         console.print(Panel(
             f"[bold magenta]Model:[/] {self.config.llm_model}\n"
             f"[bold magenta]Provider:[/] {self.config.llm_provider}",
-            title="🎬 LLM Request - Caption Generation",
+            title="LLM Request - Caption Generation",
             border_style="magenta"
         ))
         console.print(Panel(prompt[:400] + "..." if len(prompt) > 400 else prompt, 
-                           title="📝 Prompt (truncated)", border_style="dim"))
+                           title="Prompt (truncated)", border_style="dim"))
         
-        if self.config.llm_provider == "gemini":
+        if self.config.llm_provider == "antigravity":
+            result = self._client.generate(
+                prompt=prompt,
+                model=self.config.llm_model,
+                temperature=0.5
+            )
+        elif self.config.llm_provider == "gemini":
             response = self._client.models.generate_content(
                 model=self.config.llm_model,
                 contents=prompt
@@ -204,7 +246,7 @@ class CaptionGenerator:
         console.print(Panel(
             Syntax(result[:800] + "..." if len(result) > 800 else result, 
                    "json", theme="monokai", word_wrap=True),
-            title="✅ LLM Response",
+            title="LLM Response",
             border_style="green"
         ))
         console.print()
@@ -219,11 +261,23 @@ class CaptionGenerator:
         response = re.sub(r'^```\s*', '', response)
         response = re.sub(r'\s*```$', '', response)
         
+        # Try to find JSON object in response (for thinking models that include reasoning)
+        json_match = re.search(r'\{[\s\S]*"captions"[\s\S]*\}', response)
+        if json_match:
+            response = json_match.group(0)
+        
         try:
             data = json.loads(response)
         except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse caption response: {e}")
-            return []
+            # Try to repair truncated JSON
+            logger.warning(f"Initial JSON parse failed: {e}, attempting repair...")
+            try:
+                repaired = _repair_json(response)
+                data = json.loads(repaired)
+                logger.info("JSON repair successful")
+            except json.JSONDecodeError as e2:
+                logger.error(f"Failed to parse caption response even after repair: {e2}")
+                return []
         
         captions = []
         for cap in data.get("captions", []):

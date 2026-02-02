@@ -9,10 +9,12 @@
         localPath: null,
         isLocalFile: false,
         pollingInterval: null,
+        antigravityAuth: false,
         settings: {
             geminiKey: localStorage.getItem('gemini_key') || '',
             openaiKey: localStorage.getItem('openai_key') || '',
-            llmProvider: localStorage.getItem('llm_provider') || 'gemini'
+            llmProvider: localStorage.getItem('llm_provider') || 'antigravity',
+            llmModel: localStorage.getItem('llm_model') || 'claude-sonnet-4-5-thinking'
         }
     };
 
@@ -59,6 +61,14 @@
         geminiKey: $('#gemini-key'),
         openaiKey: $('#openai-key'),
         llmProvider: $('#llm-provider'),
+        llmModel: $('#llm-model'),
+        modelGroup: $('#model-group'),
+        geminiKeyGroup: $('#gemini-key-group'),
+        openaiKeyGroup: $('#openai-key-group'),
+        antigravityAuthGroup: $('#antigravity-auth-group'),
+        antigravityAuthBtn: $('#antigravity-auth-btn'),
+        authStatus: $('#auth-status'),
+        providerHint: $('#provider-hint'),
         connectionStatus: $('#connection-status')
     };
 
@@ -73,6 +83,13 @@
 
         // Update connection status
         updateConnectionStatus('connected');
+
+        // Check Antigravity auth status
+        checkAntigravityAuth();
+
+        // Load models for selected provider
+        loadModels(state.settings.llmProvider);
+        updateProviderUI(state.settings.llmProvider);
 
         // Event listeners
         elements.tabs.forEach(tab => {
@@ -99,6 +116,124 @@
         elements.settingsModal.addEventListener('click', (e) => {
             if (e.target === elements.settingsModal) closeSettings();
         });
+
+        // Provider change handler
+        elements.llmProvider.addEventListener('change', (e) => {
+            const provider = e.target.value;
+            loadModels(provider);
+            updateProviderUI(provider);
+        });
+
+        // Antigravity auth button
+        if (elements.antigravityAuthBtn) {
+            elements.antigravityAuthBtn.addEventListener('click', authenticateAntigravity);
+        }
+    }
+
+    async function checkAntigravityAuth() {
+        try {
+            const response = await fetch('/api/auth/antigravity/status');
+            const data = await response.json();
+            state.antigravityAuth = data.authenticated;
+            updateAuthUI();
+        } catch (e) {
+            console.error('Failed to check Antigravity auth:', e);
+        }
+    }
+
+    function updateAuthUI() {
+        if (elements.authStatus) {
+            elements.authStatus.textContent = state.antigravityAuth ?
+                'Authenticated' : 'Not authenticated';
+            elements.authStatus.style.color = state.antigravityAuth ? '#00ff88' : '#ff6b6b';
+        }
+        if (elements.antigravityAuthBtn) {
+            const btnText = elements.antigravityAuthBtn.querySelector('#auth-btn-text');
+            if (btnText) {
+                btnText.textContent = state.antigravityAuth ?
+                    'Re-authenticate' : 'Authenticate with Google';
+            }
+        }
+    }
+
+    async function authenticateAntigravity() {
+        const btn = elements.antigravityAuthBtn;
+        btn.disabled = true;
+        btn.querySelector('#auth-btn-text').textContent = 'Authenticating...';
+
+        try {
+            const response = await fetch('/api/auth/antigravity', { method: 'POST' });
+            const data = await response.json();
+
+            if (data.status === 'authenticated' || data.status === 'already_authenticated') {
+                state.antigravityAuth = true;
+                updateAuthUI();
+            } else {
+                elements.authStatus.textContent = data.error || 'Authentication failed';
+                elements.authStatus.style.color = '#ff6b6b';
+            }
+        } catch (e) {
+            elements.authStatus.textContent = 'Error: ' + e.message;
+            elements.authStatus.style.color = '#ff6b6b';
+        } finally {
+            btn.disabled = false;
+            updateAuthUI();
+        }
+    }
+
+    async function loadModels(provider) {
+        if (provider === 'none') {
+            if (elements.modelGroup) elements.modelGroup.style.display = 'none';
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/models?provider=${provider}`);
+            const data = await response.json();
+
+            if (elements.llmModel) {
+                elements.llmModel.innerHTML = data.models.map(m =>
+                    `<option value="${m.id}">${m.name}</option>`
+                ).join('');
+
+                // Restore saved model if available for this provider
+                const savedModel = state.settings.llmModel;
+                if (data.models.some(m => m.id === savedModel)) {
+                    elements.llmModel.value = savedModel;
+                }
+            }
+            if (elements.modelGroup) elements.modelGroup.style.display = 'block';
+        } catch (e) {
+            console.error('Failed to load models:', e);
+        }
+    }
+
+    function updateProviderUI(provider) {
+        // Show/hide relevant sections
+        const hints = {
+            'antigravity': 'Free access to Claude & Gemini via Google OAuth',
+            'gemini': 'Requires Google Gemini API key',
+            'openai': 'Requires OpenAI API key',
+            'none': 'Uses heuristic-based clip selection'
+        };
+
+        if (elements.providerHint) {
+            elements.providerHint.textContent = hints[provider] || '';
+        }
+
+        // Show/hide auth and key groups
+        if (elements.antigravityAuthGroup) {
+            elements.antigravityAuthGroup.style.display = provider === 'antigravity' ? 'block' : 'none';
+        }
+        if (elements.geminiKeyGroup) {
+            elements.geminiKeyGroup.style.display = provider === 'gemini' ? 'block' : 'none';
+        }
+        if (elements.openaiKeyGroup) {
+            elements.openaiKeyGroup.style.display = provider === 'openai' ? 'block' : 'none';
+        }
+        if (elements.modelGroup) {
+            elements.modelGroup.style.display = provider !== 'none' ? 'block' : 'none';
+        }
     }
 
     function switchTab(tabName) {
@@ -139,9 +274,11 @@
         state.settings.geminiKey = elements.geminiKey.value;
         state.settings.openaiKey = elements.openaiKey.value;
         state.settings.llmProvider = elements.llmProvider.value;
+        state.settings.llmModel = elements.llmModel ? elements.llmModel.value : '';
         localStorage.setItem('gemini_key', state.settings.geminiKey);
         localStorage.setItem('openai_key', state.settings.openaiKey);
         localStorage.setItem('llm_provider', state.settings.llmProvider);
+        localStorage.setItem('llm_model', state.settings.llmModel);
         closeSettings();
     }
 
@@ -301,6 +438,7 @@
                 gemini_key: state.settings.geminiKey,
                 openai_key: state.settings.openaiKey,
                 llm_provider: state.settings.llmProvider,
+                llm_model: state.settings.llmModel,
                 video_id: state.videoInfo.video_id
             };
 

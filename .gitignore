@@ -70,3 +70,11 @@ htmlcov/
 *.pt
 *.bin
 models/
+
+# Docs (generated)
+docs/
+
+# OAuth tokens and credentials (never commit these!)
+*_token.json
+*.credentials
+.clippervx/

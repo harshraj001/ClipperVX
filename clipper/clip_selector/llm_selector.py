@@ -13,6 +13,37 @@ from ..utils.validators import validate_timestamps, validate_no_overlap
 logger = get_logger(__name__)
 
 
+def _repair_json(json_str: str) -> str:
+    """Attempt to repair truncated JSON by closing open brackets/braces."""
+    # Count open brackets
+    open_braces = json_str.count('{') - json_str.count('}')
+    open_brackets = json_str.count('[') - json_str.count(']')
+    
+    # Try to find the last complete object in an array
+    if open_braces > 0 or open_brackets > 0:
+        # Find the last complete entry (ends with })
+        last_complete = json_str.rfind('}')
+        if last_complete > 0:
+            # Check if there's an incomplete entry after it
+            after_last = json_str[last_complete+1:].strip()
+            if after_last.startswith(','):
+                # Truncate at the last complete entry
+                json_str = json_str[:last_complete+1]
+                # Recalculate
+                open_braces = json_str.count('{') - json_str.count('}')
+                open_brackets = json_str.count('[') - json_str.count(']')
+    
+    # Close any remaining open structures
+    json_str = json_str.rstrip()
+    if json_str.endswith(','):
+        json_str = json_str[:-1]
+    
+    json_str += ']' * open_brackets
+    json_str += '}' * open_braces
+    
+    return json_str
+
+
 @dataclass
 class ClipCandidate:
     """A candidate clip identified by the selector."""
@@ -75,7 +106,12 @@ class LLMClipSelector:
         if self._client is not None:
             return self._client
         
-        if self.provider == "gemini":
+        if self.provider == "antigravity":
+            from ..llm.antigravity_client import AntigravityClient
+            self._client = AntigravityClient()
+            if not self._client.is_authenticated():
+                self._client.authenticate()
+        elif self.provider == "gemini":
             from google import genai
             self._client = genai.Client(api_key=self.config.get_api_key())
         else:
@@ -177,14 +213,20 @@ class LLMClipSelector:
         console.print(Panel(
             f"[bold cyan]Model:[/] {self.config.llm_model}\n"
             f"[bold cyan]Provider:[/] {self.provider}",
-            title="🤖 LLM Request - Clip Selection",
+            title="LLM Request - Clip Selection",
             border_style="cyan"
         ))
         console.print(Panel(prompt[:500] + "..." if len(prompt) > 500 else prompt, 
-                           title="📝 Prompt (truncated)", border_style="dim"))
+                           title="Prompt (truncated)", border_style="dim"))
         
         try:
-            if self.provider == "gemini":
+            if self.provider == "antigravity":
+                result = client.generate(
+                    prompt=prompt,
+                    model=self.config.llm_model,
+                    temperature=0.7
+                )
+            elif self.provider == "gemini":
                 response = client.models.generate_content(
                     model=self.config.llm_model,
                     contents=prompt
@@ -202,7 +244,7 @@ class LLMClipSelector:
             console.print(Panel(
                 Syntax(result[:1000] + "..." if len(result) > 1000 else result, 
                        "json", theme="monokai", word_wrap=True),
-                title="✅ LLM Response",
+                title="LLM Response",
                 border_style="green"
             ))
             console.print()
@@ -210,7 +252,7 @@ class LLMClipSelector:
             return result
                 
         except Exception as e:
-            console.print(Panel(f"[red]{e}[/]", title="❌ LLM Error", border_style="red"))
+            console.print(Panel(f"[red]{e}[/]", title="LLM Error", border_style="red"))
             logger.error(f"LLM call failed: {e}")
             raise
     
@@ -222,12 +264,24 @@ class LLMClipSelector:
         response = re.sub(r'^```\s*', '', response)
         response = re.sub(r'\s*```$', '', response)
         
+        # Try to find JSON object in response (for thinking models that include reasoning)
+        json_match = re.search(r'\{[\s\S]*"clips"[\s\S]*\}', response)
+        if json_match:
+            response = json_match.group(0)
+        
         try:
             data = json.loads(response)
         except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse LLM response: {e}")
-            logger.debug(f"Response was: {response[:500]}")
-            return []
+            # Try to repair truncated JSON
+            logger.warning(f"Initial JSON parse failed: {e}, attempting repair...")
+            try:
+                repaired = _repair_json(response)
+                data = json.loads(repaired)
+                logger.info("JSON repair successful")
+            except json.JSONDecodeError as e2:
+                logger.error(f"Failed to parse LLM response even after repair: {e2}")
+                logger.debug(f"Response was: {response[:500]}")
+                return []
         
         clips = []
         

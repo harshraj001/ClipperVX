@@ -10,7 +10,7 @@ from pathlib import Path
 from flask import Flask, render_template, request, jsonify, send_from_directory, Response
 from werkzeug.utils import secure_filename
 
-from .config import Config
+from .config import Config, AVAILABLE_MODELS
 from .orchestrator import ClipperOrchestrator
 from .downloader import YouTubeDownloader
 from .utils import get_logger, validate_youtube_url, extract_video_id
@@ -72,6 +72,60 @@ def get_video_formats(url: str) -> list:
 def index():
     """Main page."""
     return render_template('index.html')
+
+
+@app.route('/api/models')
+def get_models():
+    """Get available models by provider."""
+    provider = request.args.get('provider', 'gemini')
+    models = AVAILABLE_MODELS.get(provider, {})
+    return jsonify({
+        "provider": provider,
+        "models": [{"id": k, "name": v} for k, v in models.items()]
+    })
+
+
+@app.route('/api/providers')
+def get_providers():
+    """Get available LLM providers."""
+    return jsonify({
+        "providers": [
+            {"id": "antigravity", "name": "Antigravity (Claude/Gemini)", "requires_key": False},
+            {"id": "gemini", "name": "Google Gemini", "requires_key": True},
+            {"id": "openai", "name": "OpenAI", "requires_key": True}
+        ]
+    })
+
+
+@app.route('/api/auth/antigravity', methods=['POST'])
+def auth_antigravity():
+    """Authenticate with Antigravity (Google OAuth)."""
+    try:
+        from .llm.antigravity_client import AntigravityClient
+        client = AntigravityClient()
+        
+        if client.is_authenticated():
+            return jsonify({"status": "already_authenticated"})
+        
+        success = client.authenticate(timeout=120)
+        if success:
+            return jsonify({"status": "authenticated"})
+        else:
+            return jsonify({"error": "Authentication failed"}), 401
+    except Exception as e:
+        logger.error(f"Antigravity auth error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/auth/antigravity/status')
+def antigravity_status():
+    """Check Antigravity authentication status."""
+    try:
+        from .llm.antigravity_client import AntigravityClient
+        client = AntigravityClient()
+        return jsonify({"authenticated": client.is_authenticated()})
+    except Exception as e:
+        return jsonify({"authenticated": False, "error": str(e)})
 
 
 @app.route('/api/video-info', methods=['POST'])
@@ -196,6 +250,7 @@ def process_video():
     gemini_key = data.get('gemini_key', '')
     openai_key = data.get('openai_key', '')
     llm_provider = data.get('llm_provider', 'gemini')
+    llm_model = data.get('llm_model', '')
     
     # Validate - need either URL or local path
     if not url and not local_path:
@@ -214,7 +269,7 @@ def process_video():
     thread = threading.Thread(
         target=run_processing,
         args=(job_id, url, local_path, quality, max_clips, min_length, max_length,
-              gemini_key, openai_key, llm_provider)
+              gemini_key, openai_key, llm_provider, llm_model)
     )
     thread.daemon = True
     thread.start()
@@ -224,7 +279,7 @@ def process_video():
 
 def run_processing(job_id: str, url: str, local_path: str, quality: str, 
                    max_clips: int, min_length: int, max_length: int,
-                   gemini_key: str, openai_key: str, llm_provider: str):
+                   gemini_key: str, openai_key: str, llm_provider: str, llm_model: str):
     """Run processing and update job status."""
     
     def progress_callback(stage: str, progress: float):
@@ -246,9 +301,15 @@ def run_processing(job_id: str, url: str, local_path: str, quality: str,
             config.openai_api_key = openai_key
         if llm_provider and llm_provider != 'none':
             config.llm_provider = llm_provider
+        if llm_model:
+            config.llm_model = llm_model
         
-        use_llm = llm_provider != 'none' and (gemini_key or openai_key or 
-                  config.gemini_api_key or config.openai_api_key)
+        # Antigravity doesn't need API keys, other providers do
+        use_llm = llm_provider != 'none' and (
+            llm_provider == 'antigravity' or 
+            gemini_key or openai_key or 
+            config.gemini_api_key or config.openai_api_key
+        )
         
         orchestrator = ClipperOrchestrator(config)
         

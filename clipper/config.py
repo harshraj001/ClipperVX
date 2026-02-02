@@ -8,6 +8,29 @@ from typing import Literal
 import yaml
 
 
+# Available models by provider
+AVAILABLE_MODELS = {
+    "antigravity": {
+        "claude-sonnet-4-5-thinking": "Claude Sonnet 4.5 with extended thinking",
+        "claude-opus-4-5-thinking": "Claude Opus 4.5 with extended thinking", 
+        "claude-sonnet-4-5": "Claude Sonnet 4.5 without thinking",
+        "gemini-3-flash": "Gemini 3 Flash with thinking",
+        "gemini-3-pro-low": "Gemini 3 Pro Low",
+        "gemini-3-pro-high": "Gemini 3 Pro High",
+    },
+    "gemini": {
+        "gemini-2.5-flash": "Fast Gemini model",
+        "gemini-2.5-pro": "Pro Gemini model",
+        "gemma-3-12b-it": "Gemma 3 12B Instruct",
+    },
+    "openai": {
+        "gpt-4o-mini": "Fast GPT-4o",
+        "gpt-4o": "Full GPT-4o",
+        "gpt-4-turbo": "GPT-4 Turbo",
+    }
+}
+
+
 @dataclass
 class CaptionStyle:
     """Caption styling configuration."""
@@ -38,7 +61,7 @@ class Config:
     max_clip_length: int = 60
     
     # LLM settings
-    llm_provider: Literal["gemini", "openai"] = "gemini"
+    llm_provider: Literal["gemini", "openai", "antigravity"] = "gemini"
     llm_model: str = "gemma-3-12b-it"
     openai_model: str = "gpt-4o-mini"
     
