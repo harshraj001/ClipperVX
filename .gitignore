@@ -74,7 +74,11 @@ models/
 # Docs (generated)
 docs/
 
-# OAuth tokens and credentials (never commit these!)
+# OAuth tokens and credentials
 *_token.json
 *.credentials
 .clippervx/
+
+# YouTube Credentials
+configs/client_secrets.json
+configs/youtube_token.json

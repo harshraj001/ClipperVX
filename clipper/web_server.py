@@ -9,12 +9,15 @@ import threading
 import signal
 import subprocess
 from pathlib import Path
-from flask import Flask, render_template, request, jsonify, send_from_directory, Response
+from flask import Flask, render_template, request, jsonify, send_from_directory, Response, session, redirect, url_for
 from werkzeug.utils import secure_filename
+import datetime
+import random
 
 from .config import Config, AVAILABLE_MODELS, AVAILABLE_FONTS
 from .orchestrator import ClipperOrchestrator
 from .downloader import YouTubeDownloader
+from .uploader import YouTubeUploader
 from .utils import get_logger, validate_youtube_url, extract_video_id
 
 logger = get_logger(__name__)
@@ -30,6 +33,9 @@ app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024 * 1024  # 2GB max upload
 # Paths
 JOBS_FILE = Path.home() / ".clippervx" / "jobs.json"
 FONTS_DIR = Path(__file__).parent.parent / "fonts"
+
+# Allow OAuth over HTTP for local testing
+os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 
 # Global state
 processing_jobs = {}
@@ -215,9 +221,184 @@ def antigravity_status():
         return jsonify({"authenticated": False, "error": str(e)})
 
 
+@app.route('/api/auth/youtube/url')
+def youtube_auth_url():
+    """Get YouTube OAuth URL."""
+    try:
+        config = Config.load_default()
+        uploader = YouTubeUploader(config.config_dir)
+        
+        callback_url = url_for('youtube_callback', _external=True)
+        # Fix: Google doesn't accept 0.0.0.0, force localhost
+        callback_url = callback_url.replace('0.0.0.0', 'localhost')
+        
+        # Avoid https mismatch if behind proxy
+        if request.headers.get('X-Forwarded-Proto') == 'https':
+            callback_url = callback_url.replace('http:', 'https:')
+            
+        auth_url, state = uploader.get_auth_url(callback_url)
+        
+        # Save state flow to session to validate in callback
+        session['youtube_oauth_state'] = state
+        
+        return jsonify({"url": auth_url})
+    except Exception as e:
+        logger.error(f"YouTube auth URL error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/auth/youtube/callback')
+def youtube_callback():
+    """Handle YouTube OAuth callback."""
+    code = request.args.get('code')
+    if not code:
+        return "Error: No code provided", 400
+        
+    try:
+        config = Config.load_default()
+        uploader = YouTubeUploader(config.config_dir)
+        
+        callback_url = url_for('youtube_callback', _external=True)
+        # Fix: Google doesn't accept 0.0.0.0, force localhost
+        callback_url = callback_url.replace('0.0.0.0', 'localhost')
+
+        if request.headers.get('X-Forwarded-Proto') == 'https':
+            callback_url = callback_url.replace('http:', 'https:')
+            
+        # Retrieve state from session
+        state = session.get('youtube_oauth_state')
+        if not state:
+            return "Error: Missing OAuth state in session. Please try again.", 400
+            
+        # Re-create flow with the SAME state for validation
+        flow = uploader.create_flow(callback_url, state=state)
+        uploader.fetch_token(flow, request.url)
+        
+        return redirect('/')  # Back to home
+        
+    except Exception as e:
+        logger.error(f"YouTube callback error: {e}")
+        return f"Authentication failed: {e}", 500
+
+
+@app.route('/api/auth/youtube/status')
+def youtube_status():
+    """Check YouTube auth status."""
+    try:
+        config = Config.load_default()
+        uploader = YouTubeUploader(config.config_dir)
+        
+        if uploader.is_authenticated():
+            info = uploader.get_channel_info()
+            return jsonify({"authenticated": True, "channel": info})
+        else:
+            return jsonify({"authenticated": False})
+            
+    except Exception as e:
+        return jsonify({"authenticated": False, "error": str(e)})
+
+
+@app.route('/api/upload', methods=['POST'])
+def upload_clip():
+    """Upload a single clip to YouTube."""
+    data = request.json
+    job_id = data.get('job_id')
+    clip_index = data.get('clip_index')
+    
+    if job_id not in processing_jobs:
+        return jsonify({"error": "Job not found"}), 404
+        
+    job = processing_jobs[job_id]
+    if clip_index >= len(job.get('clips', [])):
+        return jsonify({"error": "Clip index out of range"}), 400
+        
+    clip = job['clips'][clip_index]
+    
+    try:
+        config = Config.load_default()
+        uploader = YouTubeUploader(config.config_dir)
+        
+        path = Path(clip['path'])
+        
+        # Ensure hashtags are list
+        tags = clip.get('hashtags', [])
+        if isinstance(tags, str):
+            tags = [t.strip() for t in tags.split(',')]
+            
+        video_id = uploader.upload_video(
+            file_path=path,
+            title=clip.get('title', 'ClipperVX Clip'),
+            description=clip.get('description', '') + '\n\n' + ' '.join(tags),
+            tags=tags + ['shorts', 'ClipperVX'],
+            privacy_status='unlisted'  # Default to unlisted for manual check
+        )
+        
+        return jsonify({"status": "success", "video_id": video_id})
+        
+    except Exception as e:
+        logger.error(f"Upload error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/upload_all', methods=['POST'])
+def upload_all_clips():
+    """Schedule all clips to YouTube."""
+    data = request.json
+    job_id = data.get('job_id')
+    
+    if job_id not in processing_jobs:
+        return jsonify({"error": "Job not found"}), 404
+        
+    job = processing_jobs[job_id]
+    clips = job.get('clips', [])
+    
+    if not clips:
+        return jsonify({"error": "No clips to upload"}), 400
+        
+    results = []
+    
+    try:
+        config = Config.load_default()
+        uploader = YouTubeUploader(config.config_dir)
+        
+        # Start scheduling from 1 hour in future
+        schedule_time = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=1)
+        
+        for clip in clips:
+            path = Path(clip['path'])
+            tags = clip.get('hashtags', [])
+            if isinstance(tags, str):
+                tags = [t.strip() for t in tags.split(',')]
+                
+            # Random offset +/- 15 mins for natural timing
+            offset_minutes = random.randint(-15, 15)
+            publish_at = schedule_time + datetime.timedelta(minutes=offset_minutes)
+            
+            video_id = uploader.upload_video(
+                file_path=path,
+                title=clip.get('title', 'ClipperVX Clip'),
+                description=clip.get('description', '') + '\n\n' + ' '.join(tags),
+                tags=tags + ['shorts'],
+                privacy_status='private',  # Required for scheduled
+                publish_at=publish_at
+            )
+            
+            results.append({
+                "filename": clip['filename'],
+                "video_id": video_id,
+                "scheduled_for": publish_at.isoformat()
+            })
+            
+            # Next clip 1 hour later
+            schedule_time += datetime.timedelta(hours=1)
+            
+        return jsonify({"status": "success", "uploads": results})
+        
+    except Exception as e:
+        logger.error(f"Bulk upload error: {e}")
+        return jsonify({"error": str(e)}), 500
 @app.route('/api/video-info', methods=['POST'])
-def video_info():
-    """Get video info and available formats."""
+def get_video_info():
     data = request.json
     url = data.get('url', '')
     

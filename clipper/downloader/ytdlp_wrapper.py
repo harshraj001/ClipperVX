@@ -140,12 +140,12 @@ class YouTubeDownloader:
         # Build format string based on quality
         if quality == "best" or not quality:
             format_str = "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best"
+        elif quality in ["2160", "1440", "1080", "720", "480", "360", "240", "144"]:
+            # It is a resolution target
+            format_str = f"bestvideo[height<={quality}][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<={quality}]+bestaudio/best[height<={quality}]/best"
         else:
-            # Use specific format ID with fallback
-            format_str = f"{quality}+bestaudio[ext=m4a]/{quality}/bestvideo[height<={quality}]+bestaudio/best"
-            # If quality looks like a height (e.g., "720", "1080")
-            if quality.isdigit():
-                format_str = f"bestvideo[height<={quality}][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<={quality}]+bestaudio/best[height<={quality}]/best"
+            # It is a specific Format ID (e.g. "137")
+            format_str = f"{quality}+bestaudio[ext=m4a]/{quality}/best"
         
         cmd = [
             "yt-dlp",

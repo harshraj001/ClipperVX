@@ -191,8 +191,17 @@ def gui(
     """Launch the web GUI interface."""
     from .web_server import run_server
     
+    import webbrowser
+    from threading import Timer
+
     console.print(f"\n[bold cyan]ClipperVX[/] Web Interface")
-    console.print(f"[dim]Starting server at[/] http://{host}:{port}\n")
+    url = f"http://{host}:{port}"
+    console.print(f"[dim]Starting server at[/] {url}\n")
+    
+    if not debug:  # Avoid double opening in debug reloader
+        # Force localhost for browser opening (required for OAuth)
+        browser_url = f"http://localhost:{port}"
+        Timer(1.5, lambda: webbrowser.open(browser_url)).start()
     
     run_server(host=host, port=port, debug=debug)
 

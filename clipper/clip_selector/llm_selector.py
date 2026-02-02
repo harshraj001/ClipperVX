@@ -84,7 +84,7 @@ VIRAL METADATA GENERATION:
 For each selected clip, generate:
 1. A catchy, clickbait-style TITLE (max 50 chars)
 2. A compelling DESCRIPTION (max 200 chars) that encourages watching
-3. 3-5 relevant, high-traffic HASHTAGS
+3. 20 trending, high-traffic HASHTAGS related to the content/niche
 
 OUTPUT FORMAT:
 {{

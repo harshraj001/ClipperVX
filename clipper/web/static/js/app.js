@@ -15,7 +15,9 @@
             openaiKey: localStorage.getItem('openai_key') || '',
             llmProvider: localStorage.getItem('llm_provider') || 'antigravity',
             llmModel: localStorage.getItem('llm_model') || 'claude-sonnet-4-5-thinking'
-        }
+        },
+        youtubeAuth: false,
+        youtubeChannel: null
     };
 
     // Elements
@@ -84,7 +86,11 @@
         clipHashtags: $('#clip-hashtags'),
         copyTitleBtn: $('#copy-title-btn'),
         copyDescriptionBtn: $('#copy-description-btn'),
-        copyHashtagsBtn: $('#copy-hashtags-btn')
+        copyHashtagsBtn: $('#copy-hashtags-btn'),
+        youtubeAuthBtn: $('#youtube-auth-btn'),
+        youtubeAuthStatus: $('#youtube-auth-status'),
+        postAllYoutubeBtn: $('#post-all-youtube-btn'),
+        youtubePostBtn: $('#youtube-post-btn')
     };
 
     // Initialize
@@ -194,6 +200,17 @@
         if (elements.copyHashtagsBtn) {
             elements.copyHashtagsBtn.addEventListener('click', () => copyToClipboard(elements.clipHashtags, elements.copyHashtagsBtn));
         }
+
+        // YouTube Automation
+        if (elements.youtubeAuthBtn) {
+            elements.youtubeAuthBtn.addEventListener('click', connectYouTube);
+        }
+        if (elements.postAllYoutubeBtn) {
+            elements.postAllYoutubeBtn.addEventListener('click', () => postAllClips());
+        }
+
+        // Initial YouTube check
+        checkYouTubeStatus();
     }
 
     // Copy helper
@@ -517,6 +534,135 @@
         return `${mins}:${secs.toString().padStart(2, '0')}`;
     }
 
+    // YouTube Automation Logic
+    async function checkYouTubeStatus() {
+        try {
+            const response = await fetch('/api/auth/youtube/status');
+            const data = await response.json();
+
+            state.youtubeAuth = data.authenticated;
+            if (data.channel) {
+                state.youtubeChannel = data.channel;
+            }
+            updateYouTubeUI();
+        } catch (e) {
+            console.error('Failed to check YouTube status:', e);
+        }
+    }
+
+    function updateYouTubeUI() {
+        if (elements.youtubeAuthBtn && elements.youtubeAuthStatus) {
+            if (state.youtubeAuth) {
+                const channelName = state.youtubeChannel ? state.youtubeChannel.title : 'Connected';
+                elements.youtubeAuthBtn.textContent = 'Connected as ' + channelName;
+                elements.youtubeAuthBtn.disabled = true;
+                elements.youtubeAuthBtn.classList.add('btn-success');
+                elements.youtubeAuthStatus.textContent = 'Ready to upload clips';
+                elements.youtubeAuthStatus.style.color = '#00ff88';
+            } else {
+                elements.youtubeAuthBtn.textContent = 'Connect YouTube Account';
+                elements.youtubeAuthBtn.disabled = false;
+                elements.youtubeAuthStatus.textContent = 'Link your channel to post clips directly';
+                elements.youtubeAuthStatus.style.color = '';
+            }
+        }
+    }
+
+    async function connectYouTube() {
+        const btn = elements.youtubeAuthBtn;
+        btn.disabled = true;
+        btn.textContent = 'Connecting...';
+
+        try {
+            const response = await fetch('/api/auth/youtube/url');
+            const data = await response.json();
+
+            if (data.url) {
+                window.location.href = data.url;
+            } else {
+                alert('Failed to get auth URL');
+                btn.disabled = false;
+                btn.textContent = 'Connect YouTube Account';
+            }
+        } catch (e) {
+            console.error('Auth error:', e);
+            btn.disabled = false;
+            btn.textContent = 'Connect YouTube Account';
+        }
+    }
+
+    async function postClip(clipIndex, btn) {
+        if (!confirm('Are you sure you want to post this clip to YouTube?')) return;
+
+        const originalText = btn.innerHTML;
+        btn.disabled = true;
+        btn.textContent = 'Posting...';
+
+        try {
+            const response = await fetch('/api/upload', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    job_id: state.jobId,
+                    clip_index: clipIndex
+                })
+            });
+            const data = await response.json();
+
+            if (data.status === 'success') {
+                btn.textContent = 'Posted!';
+                btn.classList.add('btn-success');
+                addLog(`✅ Clip posted to YouTube (ID: ${data.video_id})`);
+            } else {
+                alert('Error: ' + data.error);
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }
+        } catch (e) {
+            alert('Upload failed: ' + e.message);
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+        }
+    }
+
+    async function postAllClips() {
+        if (!state.jobId) return;
+        if (!confirm('This will schedule all clips to be posted starting 1 hour from now, 1 hour apart. Proceed?')) return;
+
+        const btn = elements.postAllYoutubeBtn;
+        btn.disabled = true;
+        btn.textContent = 'Scheduling...';
+
+        try {
+            const response = await fetch('/api/upload_all', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ job_id: state.jobId })
+            });
+            const data = await response.json();
+
+            if (data.status === 'success') {
+                btn.textContent = 'Scheduled!';
+                btn.classList.add('btn-success');
+                addLog(`✅ ${data.uploads.length} clips scheduled for YouTube upload`);
+
+                // Show schedule details in log
+                data.uploads.forEach(u => {
+                    const time = new Date(u.scheduled_for).toLocaleString();
+                    addLog(`📅 Scheduled: ${u.filename} at ${time}`);
+                });
+            } else {
+                alert('Error: ' + data.error);
+                btn.disabled = false;
+                btn.textContent = 'Post All (Scheduled)';
+            }
+        } catch (e) {
+            alert('Bulk upload failed: ' + e.message);
+            btn.disabled = false;
+            btn.textContent = 'Post All (Scheduled)';
+        }
+    }
+
     async function startProcessing() {
         if (!state.videoInfo) return;
 
@@ -640,6 +786,11 @@
         elements.resultsSection.classList.remove('hidden');
         elements.clipsGrid.innerHTML = '';
 
+        // Show/Hide Post All button
+        if (elements.postAllYoutubeBtn) {
+            elements.postAllYoutubeBtn.style.display = state.youtubeAuth ? 'flex' : 'none';
+        }
+
         clips.forEach(clip => {
             const relativePath = clip.relative_path || `${videoId}/${clip.filename}`;
 
@@ -657,11 +808,46 @@
                     <button class="btn-primary view-details-btn" style="flex: 1;">Clip Details</button>
                     <a href="/output/${relativePath}" download="${clip.filename}" class="btn-secondary" style="flex: 1; text-align: center;">Download</a>
                 </div>
+                <button class="btn-secondary youtube-single-btn" style="margin-top: 8px; width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px;">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M23.5 6.19a3.02 3.02 0 0 0-2.12-2.14C19.54 3.5 12 3.5 12 3.5s-7.54 0-9.38.55A3.02 3.02 0 0 0 .5 6.19 31.7 31.7 0 0 0 0 12a31.7 31.7 0 0 0 .5 5.81 3.02 3.02 0 0 0 2.12 2.14c1.84.55 9.38.55 9.38.55s7.54 0 9.38-.55a3.02 3.02 0 0 0 2.12-2.14A31.7 31.7 0 0 0 24 12a31.7 31.7 0 0 0-.5-5.81zM9.54 15.57V8.43L15.82 12l-6.28 3.57z" />
+                    </svg>
+                    Post to YouTube
+                </button>
             `;
 
             // Add listener
             const detailsBtn = card.querySelector('.view-details-btn');
-            detailsBtn.addEventListener('click', () => showClipDetails(clip));
+            detailsBtn.addEventListener('click', () => {
+                showClipDetails(clip);
+
+                // Update the "Post to YouTube" button inside the modal
+                if (elements.youtubePostBtn) {
+                    // Remove old listeners by cloning
+                    const newBtn = elements.youtubePostBtn.cloneNode(true);
+                    elements.youtubePostBtn.parentNode.replaceChild(newBtn, elements.youtubePostBtn);
+                    elements.youtubePostBtn = newBtn;
+
+                    elements.youtubePostBtn.addEventListener('click', () => {
+                        postClip(clips.indexOf(clip), elements.youtubePostBtn);
+                    });
+
+                    // Update state
+                    if (!state.youtubeAuth) {
+                        elements.youtubePostBtn.style.display = 'none';
+                    } else {
+                        elements.youtubePostBtn.style.display = 'flex';
+                    }
+                }
+            });
+
+            // Single post button listener
+            const postBtn = card.querySelector('.youtube-single-btn');
+            if (!state.youtubeAuth) {
+                postBtn.style.display = 'none';
+            } else {
+                postBtn.addEventListener('click', () => postClip(clips.indexOf(clip), postBtn));
+            }
 
             elements.clipsGrid.appendChild(card);
         });

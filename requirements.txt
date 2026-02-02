@@ -10,3 +10,5 @@ webvtt-py>=0.4.6
 flask>=3.0.0
 flask-socketio>=5.3.0
 eventlet>=0.36.0
+google-auth-oauthlib>=1.0.0
+google-api-python-client>=2.0.0

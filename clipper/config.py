@@ -73,7 +73,7 @@ class Config:
     
     # LLM settings
     llm_provider: Literal["gemini", "openai", "antigravity"] = "gemini"
-    llm_model: str = "gemma-3-12b-it"
+    llm_model: str = "gemini-3-flash"
     openai_model: str = "gpt-4o-mini"
     
     # Whisper settings
@@ -143,3 +143,8 @@ class Config:
             if not self.openai_api_key:
                 raise ValueError("OPENAI_API_KEY environment variable not set")
             return self.openai_api_key
+
+    @property
+    def config_dir(self) -> Path:
+        """Get the directory containing configuration files."""
+        return Path(__file__).parent.parent / "configs"
