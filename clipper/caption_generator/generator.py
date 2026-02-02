@@ -161,6 +161,12 @@ class CaptionGenerator:
     
     def _call_llm(self, prompt: str) -> str:
         """Call LLM."""
+        from rich.console import Console
+        from rich.panel import Panel
+        from rich.syntax import Syntax
+        
+        console = Console()
+        
         if self._client is None:
             if self.config.llm_provider == "gemini":
                 from google import genai
@@ -169,19 +175,41 @@ class CaptionGenerator:
                 from openai import OpenAI
                 self._client = OpenAI(api_key=self.config.get_api_key())
         
+        # Log the request
+        console.print()
+        console.print(Panel(
+            f"[bold magenta]Model:[/] {self.config.llm_model}\n"
+            f"[bold magenta]Provider:[/] {self.config.llm_provider}",
+            title="🎬 LLM Request - Caption Generation",
+            border_style="magenta"
+        ))
+        console.print(Panel(prompt[:400] + "..." if len(prompt) > 400 else prompt, 
+                           title="📝 Prompt (truncated)", border_style="dim"))
+        
         if self.config.llm_provider == "gemini":
             response = self._client.models.generate_content(
                 model=self.config.llm_model,
                 contents=prompt
             )
-            return response.text
+            result = response.text
         else:
             response = self._client.chat.completions.create(
                 model=self.config.openai_model,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.5
             )
-            return response.choices[0].message.content
+            result = response.choices[0].message.content
+        
+        # Log the response
+        console.print(Panel(
+            Syntax(result[:800] + "..." if len(result) > 800 else result, 
+                   "json", theme="monokai", word_wrap=True),
+            title="✅ LLM Response",
+            border_style="green"
+        ))
+        console.print()
+        
+        return result
     
     def _parse_response(self, response: str) -> List[Caption]:
         """Parse LLM response."""

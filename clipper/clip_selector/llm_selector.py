@@ -165,7 +165,23 @@ class LLMClipSelector:
     
     def _call_llm(self, prompt: str) -> str:
         """Call LLM and return response text."""
+        from rich.console import Console
+        from rich.panel import Panel
+        from rich.syntax import Syntax
+        
+        console = Console()
         client = self._get_client()
+        
+        # Log the request
+        console.print()
+        console.print(Panel(
+            f"[bold cyan]Model:[/] {self.config.llm_model}\n"
+            f"[bold cyan]Provider:[/] {self.provider}",
+            title="🤖 LLM Request - Clip Selection",
+            border_style="cyan"
+        ))
+        console.print(Panel(prompt[:500] + "..." if len(prompt) > 500 else prompt, 
+                           title="📝 Prompt (truncated)", border_style="dim"))
         
         try:
             if self.provider == "gemini":
@@ -173,16 +189,28 @@ class LLMClipSelector:
                     model=self.config.llm_model,
                     contents=prompt
                 )
-                return response.text
+                result = response.text
             else:
                 response = client.chat.completions.create(
                     model=self.config.openai_model,
                     messages=[{"role": "user", "content": prompt}],
                     temperature=0.7
                 )
-                return response.choices[0].message.content
+                result = response.choices[0].message.content
+            
+            # Log the response
+            console.print(Panel(
+                Syntax(result[:1000] + "..." if len(result) > 1000 else result, 
+                       "json", theme="monokai", word_wrap=True),
+                title="✅ LLM Response",
+                border_style="green"
+            ))
+            console.print()
+            
+            return result
                 
         except Exception as e:
+            console.print(Panel(f"[red]{e}[/]", title="❌ LLM Error", border_style="red"))
             logger.error(f"LLM call failed: {e}")
             raise
     
