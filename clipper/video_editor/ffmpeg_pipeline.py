@@ -136,9 +136,12 @@ class FFmpegPipeline:
         # Escape special characters in ASS path for FFmpeg
         ass_path_escaped = str(ass_path).replace("\\", "/").replace(":", "\\:")
         
+        # Stage fonts to a flat directory to ensure libass finds them
+        flat_fonts_dir = self.temp_dir / "fonts_flat"
+        self._stage_fonts(self.config.fonts_dir, flat_fonts_dir)
+        
         # Get fonts directory from config
-        fonts_dir = self.config.fonts_dir.resolve()
-        fonts_dir_escaped = str(fonts_dir).replace("\\", "/").replace(":", "\\:")
+        fonts_dir_escaped = str(flat_fonts_dir).replace("\\", "/").replace(":", "\\:")
         
         filter_complex = (
             # Create blurred background
@@ -227,3 +230,18 @@ class FFmpegPipeline:
         
         import json
         return json.loads(result.stdout)
+    
+    def _stage_fonts(self, source_dir: Path, dest_dir: Path):
+        """Stage fonts from source to destination (flat structure)."""
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Find all font files recursively
+        font_extensions = {".ttf", ".otf", ".TTF", ".OTF"}
+        
+        for file_path in source_dir.rglob("*"):
+            if file_path.suffix in font_extensions and file_path.is_file():
+                # Copy with original name to flat directory
+                try:
+                    shutil.copy2(file_path, dest_dir / file_path.name)
+                except Exception as e:
+                    logger.warning(f"Failed to copy font {file_path}: {e}")

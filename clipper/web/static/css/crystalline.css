@@ -113,6 +113,7 @@ body {
 .btn-icon {
     width: 40px;
     height: 40px;
+    padding: 0;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -122,6 +123,11 @@ body {
     color: var(--text-secondary);
     cursor: pointer;
     transition: all var(--duration) var(--ease-out);
+    line-height: 0;
+}
+
+.btn-icon svg {
+    display: block;
 }
 
 .btn-icon:hover {
@@ -505,6 +511,7 @@ body {
 .modal-header h3 {
     font-size: 18px;
     font-weight: 600;
+    margin: 0;
 }
 
 .modal-body {
@@ -798,11 +805,17 @@ body {
     display: flex;
     flex-direction: column;
     gap: 4px;
+    flex: 1;
+    min-width: 0;
+    margin-right: 12px;
 }
 
 .history-item-title {
     font-weight: 500;
     color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .history-item-meta {

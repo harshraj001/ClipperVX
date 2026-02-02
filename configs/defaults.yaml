@@ -31,7 +31,7 @@ caption_color: "&H00FFFFFF"
 caption_outline_color: "&H00000000"
 caption_outline_width: 4
 caption_shadow_depth: 2
-caption_margin_v: 600
+caption_margin_v: 500
 
 # FFmpeg settings
 ffmpeg_preset: "medium"
