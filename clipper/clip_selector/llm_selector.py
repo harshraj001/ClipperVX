@@ -76,9 +76,8 @@ class LLMClipSelector:
             return self._client
         
         if self.provider == "gemini":
-            import google.generativeai as genai
-            genai.configure(api_key=self.config.get_api_key())
-            self._client = genai.GenerativeModel(self.config.llm_model)
+            from google import genai
+            self._client = genai.Client(api_key=self.config.get_api_key())
         else:
             from openai import OpenAI
             self._client = OpenAI(api_key=self.config.get_api_key())
@@ -170,7 +169,10 @@ class LLMClipSelector:
         
         try:
             if self.provider == "gemini":
-                response = client.generate_content(prompt)
+                response = client.models.generate_content(
+                    model=self.config.llm_model,
+                    contents=prompt
+                )
                 return response.text
             else:
                 response = client.chat.completions.create(
