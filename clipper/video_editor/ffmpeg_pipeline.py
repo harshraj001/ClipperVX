@@ -89,8 +89,14 @@ class FFmpegPipeline:
             
             # Run combined FFmpeg command
             duration = clip.end - clip.start
+            
+            # Pass metadata if available
+            title = getattr(clip, 'title', '')
+            description = getattr(clip, 'description', '')
+            
             self._run_ffmpeg_render(
-                video_path, clip.start, clip.end, ass_path, output_path
+                video_path, clip.start, clip.end, ass_path, output_path,
+                title=title, description=description
             )
             
             # Cleanup temp files
@@ -120,12 +126,15 @@ class FFmpegPipeline:
         start: float,
         end: float,
         ass_path: Path,
-        output_path: Path
+        output_path: Path,
+        title: str = "",
+        description: str = ""
     ):
         """Run FFmpeg to render final video."""
         
         w = self.config.target_width
         h = self.config.target_height
+        duration = end - start
         
         # Complex filter for:
         # 1. Create blurred background scaled to fill 9:16
@@ -159,13 +168,21 @@ class FFmpegPipeline:
             "ffmpeg",
             "-y",  # Overwrite output
             "-ss", str(start),  # Seek before input (faster)
-            "-to", str(end),
+            "-t", str(duration), # Use duration instead of -to for safer cutting
             "-i", str(input_path),
             "-filter_complex", filter_complex,
             "-map", "[outv]",
             "-map", "0:a?",  # Map audio if exists
+            
+            # Metadata handling
+            "-map_metadata", "-1",  # Strip all source metadata
+            "-metadata", f"title={title}",
+            "-metadata", f"comment={description}",
+            
             "-c:v", "libx264",
             "-preset", self.config.ffmpeg_preset,
+            # Force shorter keyframe interval (GOP) for better seeking in stripped clips
+            "-g", "60", 
             "-crf", str(self.config.ffmpeg_crf),
             "-c:a", "aac",
             "-b:a", self.config.audio_bitrate,
