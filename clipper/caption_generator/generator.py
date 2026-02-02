@@ -163,15 +163,17 @@ class CaptionGenerator:
         """Call LLM."""
         if self._client is None:
             if self.config.llm_provider == "gemini":
-                import google.generativeai as genai
-                genai.configure(api_key=self.config.get_api_key())
-                self._client = genai.GenerativeModel(self.config.llm_model)
+                from google import genai
+                self._client = genai.Client(api_key=self.config.get_api_key())
             else:
                 from openai import OpenAI
                 self._client = OpenAI(api_key=self.config.get_api_key())
         
         if self.config.llm_provider == "gemini":
-            response = self._client.generate_content(prompt)
+            response = self._client.models.generate_content(
+                model=self.config.llm_model,
+                contents=prompt
+            )
             return response.text
         else:
             response = self._client.chat.completions.create(
