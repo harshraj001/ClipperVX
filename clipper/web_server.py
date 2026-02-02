@@ -6,11 +6,13 @@ import time
 import uuid
 import shutil
 import threading
+import signal
+import subprocess
 from pathlib import Path
 from flask import Flask, render_template, request, jsonify, send_from_directory, Response
 from werkzeug.utils import secure_filename
 
-from .config import Config, AVAILABLE_MODELS
+from .config import Config, AVAILABLE_MODELS, AVAILABLE_FONTS
 from .orchestrator import ClipperOrchestrator
 from .downloader import YouTubeDownloader
 from .utils import get_logger, validate_youtube_url, extract_video_id
@@ -25,8 +27,13 @@ app = Flask(__name__,
 app.config['SECRET_KEY'] = os.urandom(24)
 app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024 * 1024  # 2GB max upload
 
+# Paths
+JOBS_FILE = Path.home() / ".clippervx" / "jobs.json"
+FONTS_DIR = Path(__file__).parent.parent / "fonts"
+
 # Global state
 processing_jobs = {}
+stop_flags = {}  # job_id -> threading.Event for cancellation
 
 
 def get_video_formats(url: str) -> list:
@@ -68,6 +75,29 @@ def get_video_formats(url: str) -> list:
         return []
 
 
+def load_jobs() -> dict:
+    """Load jobs from persistent storage."""
+    if JOBS_FILE.exists():
+        try:
+            return json.loads(JOBS_FILE.read_text())
+        except Exception as e:
+            logger.error(f"Failed to load jobs: {e}")
+    return {}
+
+
+def save_jobs(jobs: dict):
+    """Save jobs to persistent storage."""
+    try:
+        JOBS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        JOBS_FILE.write_text(json.dumps(jobs, indent=2))
+    except Exception as e:
+        logger.error(f"Failed to save jobs: {e}")
+
+
+# Load existing jobs on startup
+processing_jobs.update(load_jobs())
+
+
 @app.route('/')
 def index():
     """Main page."""
@@ -95,6 +125,63 @@ def get_providers():
             {"id": "openai", "name": "OpenAI", "requires_key": True}
         ]
     })
+
+
+@app.route('/api/fonts')
+def get_fonts():
+    """Get available fonts with file paths."""
+    fonts = []
+    for name, rel_path in AVAILABLE_FONTS.items():
+        font_path = FONTS_DIR / rel_path
+        fonts.append({
+            "name": name,
+            "path": f"/fonts/{rel_path}",  # Web accessible path
+            "file": rel_path.split("/")[-1],
+            "available": font_path.exists()
+        })
+    return jsonify({"fonts": fonts})
+
+
+@app.route('/fonts/<path:filename>')
+def serve_font(filename):
+    """Serve font files."""
+    return send_from_directory(FONTS_DIR, filename)
+
+
+@app.route('/api/jobs')
+def get_all_jobs():
+    """Get all jobs for history."""
+    return jsonify({"jobs": list(processing_jobs.values())})
+
+
+@app.route('/api/jobs', methods=['DELETE'])
+def clear_jobs():
+    """Clear all job history."""
+    processing_jobs.clear()
+    save_jobs({})
+    return jsonify({"status": "cleared"})
+
+
+@app.route('/api/job/<job_id>/stop', methods=['POST'])
+def stop_job(job_id):
+    """Stop a running job."""
+    if job_id not in processing_jobs:
+        return jsonify({"error": "Job not found"}), 404
+    
+    job = processing_jobs[job_id]
+    if job.get("status") != "processing":
+        return jsonify({"error": "Job is not running"}), 400
+    
+    # Set stop flag
+    if job_id in stop_flags:
+        stop_flags[job_id].set()
+    
+    # Update job status
+    job["status"] = "stopped"
+    job["error"] = "Cancelled by user"
+    save_jobs(processing_jobs)
+    
+    return jsonify({"status": "stopped"})
 
 
 @app.route('/api/auth/antigravity', methods=['POST'])
@@ -251,6 +338,7 @@ def process_video():
     openai_key = data.get('openai_key', '')
     llm_provider = data.get('llm_provider', 'gemini')
     llm_model = data.get('llm_model', '')
+    font = data.get('font', 'Komika Axis')
     
     # Validate - need either URL or local path
     if not url and not local_path:
@@ -263,13 +351,28 @@ def process_video():
         video_id = extract_video_id(url) if url else f"local_{uuid.uuid4().hex[:8]}"
     
     job_id = f"{video_id}_{int(time.time())}"
-    processing_jobs[job_id] = {"status": "started", "progress": 0, "stage": "Initializing..."}
+    
+    # Create stop flag for this job
+    stop_flags[job_id] = threading.Event()
+    
+    # Initialize job
+    processing_jobs[job_id] = {
+        "id": job_id,
+        "status": "started", 
+        "progress": 0, 
+        "stage": "Initializing...",
+        "video_id": video_id,
+        "title": data.get('title', 'Video'),
+        "created": time.time(),
+        "font": font
+    }
+    save_jobs(processing_jobs)
     
     # Start processing in background thread
     thread = threading.Thread(
         target=run_processing,
         args=(job_id, url, local_path, quality, max_clips, min_length, max_length,
-              gemini_key, openai_key, llm_provider, llm_model)
+              gemini_key, openai_key, llm_provider, llm_model, font)
     )
     thread.daemon = True
     thread.start()
@@ -279,15 +382,24 @@ def process_video():
 
 def run_processing(job_id: str, url: str, local_path: str, quality: str, 
                    max_clips: int, min_length: int, max_length: int,
-                   gemini_key: str, openai_key: str, llm_provider: str, llm_model: str):
+                   gemini_key: str, openai_key: str, llm_provider: str, llm_model: str, font: str):
     """Run processing and update job status."""
     
+    stop_flag = stop_flags.get(job_id)
+    
     def progress_callback(stage: str, progress: float):
-        processing_jobs[job_id] = {
-            "status": "processing",
-            "stage": stage,
-            "progress": int(progress * 100)
-        }
+        # Check if job was stopped
+        if stop_flag and stop_flag.is_set():
+            raise InterruptedError("Job cancelled by user")
+        
+        # Update job status
+        if job_id in processing_jobs:
+            processing_jobs[job_id].update({
+                "status": "processing",
+                "stage": stage,
+                "progress": int(progress * 100)
+            })
+            save_jobs(processing_jobs)
     
     try:
         progress_callback("Initializing...", 0.05)
@@ -303,6 +415,10 @@ def run_processing(job_id: str, url: str, local_path: str, quality: str,
             config.llm_provider = llm_provider
         if llm_model:
             config.llm_model = llm_model
+        
+        # Apply font selection
+        if font:
+            config.caption_style.font = font
         
         # Antigravity doesn't need API keys, other providers do
         use_llm = llm_provider != 'none' and (
@@ -321,7 +437,8 @@ def run_processing(job_id: str, url: str, local_path: str, quality: str,
                 min_length=min_length,
                 max_length=max_length,
                 use_llm=use_llm,
-                progress_callback=progress_callback
+                progress_callback=progress_callback,
+                stop_event=stop_flag
             )
         else:
             result = orchestrator.run(
@@ -331,7 +448,8 @@ def run_processing(job_id: str, url: str, local_path: str, quality: str,
                 max_length=max_length,
                 quality=quality,
                 use_llm=use_llm,
-                progress_callback=progress_callback
+                progress_callback=progress_callback,
+                stop_event=stop_flag
             )
         
         # Build clips data with proper paths
@@ -342,27 +460,48 @@ def run_processing(job_id: str, url: str, local_path: str, quality: str,
                 'path': str(c.output_path.resolve()),
                 'relative_path': f"{result.video_id}/{c.output_path.name}",
                 'duration': c.duration,
-                'hook': c.hook
+                'hook': c.hook,
+                'title': c.title,
+                'description': c.description,
+                'hashtags': c.hashtags
             })
         
-        processing_jobs[job_id] = {
-            "status": "complete",
-            "clips": clips_data,
-            "errors": result.errors,
-            "video_id": result.video_id,
-            "progress": 100
-        }
+        if job_id in processing_jobs:
+            processing_jobs[job_id].update({
+                "status": "complete",
+                "clips": clips_data,
+                "errors": result.errors,
+                "video_id": result.video_id,
+                "progress": 100
+            })
+            save_jobs(processing_jobs)
+        
+    except InterruptedError:
+        logger.info(f"Job {job_id} was cancelled by user")
+        if job_id in processing_jobs:
+            processing_jobs[job_id].update({
+                "status": "stopped",
+                "error": "Cancelled by user"
+            })
+            save_jobs(processing_jobs)
         
     except Exception as e:
         logger.error(f"Processing failed: {e}")
         import traceback
         traceback.print_exc()
         
-        processing_jobs[job_id] = {
-            "status": "error",
-            "error": str(e),
-            "progress": 0
-        }
+        if job_id in processing_jobs:
+            processing_jobs[job_id].update({
+                "status": "error",
+                "error": str(e),
+                "progress": 0
+            })
+            save_jobs(processing_jobs)
+    
+    finally:
+        # Cleanup stop flag
+        if job_id in stop_flags:
+            del stop_flags[job_id]
 
 
 @app.route('/api/job/<job_id>')

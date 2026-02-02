@@ -10,9 +10,10 @@ AI-powered tool to automatically extract and transform long-form videos into vir
 - 🎬 **YouTube Download** - Fetch videos directly from YouTube URLs with quality selection
 - 📁 **Local File Support** - Process your own video files
 - 🤖 **AI Clip Selection** - Uses Claude, Gemini, or OpenAI to identify the most engaging segments
-- 📝 **Auto Captions** - Generates word-by-word animated captions
+- 📢 **Viral Metadata** - Automatically generates clickbait titles, descriptions, and hashtags
+- 📝 **Auto Captions** - Generates word-by-word animated captions with custom fonts
 - 🎨 **Vertical Format** - Automatically crops to 9:16 aspect ratio
-- 🌐 **Web GUI** - Beautiful web interface with model selection
+- 🌐 **Web GUI** - Beautiful web interface with preview and history
 - ⚡ **CLI Support** - Command-line interface for automation
 - 🚀 **Antigravity Mode** - Free access to Claude & Gemini models via Google OAuth
 

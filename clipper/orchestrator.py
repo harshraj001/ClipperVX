@@ -26,6 +26,9 @@ class ClipResult:
     duration: float
     hook: str
     virality_score: float
+    title: str = ""
+    description: str = ""
+    hashtags: List[str] = field(default_factory=list)
 
 
 @dataclass
@@ -50,7 +53,11 @@ class ProcessResult:
                     "end": c.end,
                     "duration": c.duration,
                     "hook": c.hook,
-                    "virality_score": c.virality_score
+                    "virality_score": c.virality_score,
+                    "title": c.title,
+                    "description": c.description,
+                    "hashtags": c.hashtags,
+                    "relative_path": f"{self.video_id}/{c.output_path.name}"
                 }
                 for c in self.clips
             ],
@@ -84,7 +91,8 @@ class ClipperOrchestrator:
         max_length: int = None,
         quality: str = "best",
         use_llm: bool = True,
-        progress_callback: Optional[Callable[[str, float], None]] = None
+        progress_callback: Optional[Callable[[str, float], None]] = None,
+        stop_event: Optional[any] = None
     ) -> ProcessResult:
         """
         Process a YouTube URL and generate clips.
@@ -97,6 +105,7 @@ class ClipperOrchestrator:
             quality: Video quality (format ID or 'best')
             use_llm: Whether to use LLM for clip selection
             progress_callback: Optional callback(stage, progress)
+            stop_event: Optional threading.Event to check for cancellation
             
         Returns:
             ProcessResult with generated clips
@@ -112,11 +121,18 @@ class ClipperOrchestrator:
         
         def update_progress(stage: str, percent: int):
             """Update progress with direct percentage."""
+            if stop_event and stop_event.is_set():
+                raise InterruptedError("Job cancelled by user")
+                
             if progress_callback:
                 progress_callback(stage, percent / 100.0)
             logger.info(f"[{percent}%] {stage}")
         
         try:
+            # Check stop before starting
+            if stop_event and stop_event.is_set():
+                raise InterruptedError("Job cancelled by user")
+
             # Step 1: Download video (0-15%)
             update_progress("Downloading video...", 5)
             download = self.downloader.download(url, quality=quality)
@@ -149,6 +165,10 @@ class ClipperOrchestrator:
             clip_range = 50  # 45% to 95%
             
             for i, clip in enumerate(clips):
+                # Check stop before each clip
+                if stop_event and stop_event.is_set():
+                    raise InterruptedError("Job cancelled by user")
+                    
                 clip_pct = clip_start + int(clip_range * i / len(clips))
                 update_progress(f"Rendering clip {i+1}/{len(clips)}...", clip_pct)
                 
@@ -177,6 +197,9 @@ class ClipperOrchestrator:
             # Cleanup
             self._cleanup(download)
             
+        except InterruptedError as e:
+            logger.info(f"Cancellation caught in orchestrator: {e}")
+            raise e
         except Exception as e:
             logger.error(f"Pipeline failed: {e}")
             result.errors.append(str(e))
@@ -202,18 +225,27 @@ class ClipperOrchestrator:
         use_llm: bool
     ) -> List[ClipCandidate]:
         """Select best clips from transcript."""
+        clips = []
         if use_llm:
             try:
-                return self.llm_selector.select(
+                clips = self.llm_selector.select(
                     transcript, title, max_clips, min_length, max_length
                 )
             except Exception as e:
                 logger.warning(f"LLM selection failed: {e}, using heuristics")
         
-        # Fallback to heuristic selection
-        self.heuristic_selector.min_length = min_length
-        self.heuristic_selector.max_length = max_length
-        return self.heuristic_selector.select(transcript, max_clips)
+        if not clips:
+            # Fallback to heuristic selection
+            self.heuristic_selector.min_length = min_length
+            self.heuristic_selector.max_length = max_length
+            clips = self.heuristic_selector.select(transcript, max_clips)
+            
+        # Log metadata check
+        if clips:
+            c = clips[0]
+            logger.info(f"Clip metadata check - Title: '{c.title}', Desc: '{c.description[:20]}...', Tags: {c.hashtags}")
+            
+        return clips
     
     def _process_clip(
         self,
@@ -242,7 +274,10 @@ class ClipperOrchestrator:
             end=clip.end,
             duration=clip.end - clip.start,
             hook=clip.hook,
-            virality_score=clip.virality_score
+            virality_score=clip.virality_score,
+            title=getattr(clip, 'title', ''),
+            description=getattr(clip, 'description', ''),
+            hashtags=getattr(clip, 'hashtags', [])
         )
     
     def _save_metadata(self, result: ProcessResult, output_dir: Path):
@@ -276,7 +311,8 @@ class ClipperOrchestrator:
         min_length: int = None,
         max_length: int = None,
         use_llm: bool = True,
-        progress_callback: Optional[Callable[[str, float], None]] = None
+        progress_callback: Optional[Callable[[str, float], None]] = None,
+        stop_event: Optional[any] = None
     ) -> ProcessResult:
         """
         Process a local video file and generate clips.
@@ -288,6 +324,7 @@ class ClipperOrchestrator:
             max_length: Maximum clip length (seconds)
             use_llm: Whether to use LLM for clip selection
             progress_callback: Optional callback(stage, progress)
+            stop_event: Optional threading.Event
             
         Returns:
             ProcessResult with generated clips
@@ -358,6 +395,9 @@ class ClipperOrchestrator:
             # Save metadata
             self._save_metadata(result, output_dir)
             
+        except InterruptedError as e:
+            logger.info(f"Cancellation caught in run_from_file: {e}")
+            raise e
         except Exception as e:
             logger.error(f"Pipeline failed: {e}")
             import traceback

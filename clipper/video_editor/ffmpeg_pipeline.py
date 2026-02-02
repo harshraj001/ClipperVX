@@ -136,6 +136,10 @@ class FFmpegPipeline:
         # Escape special characters in ASS path for FFmpeg
         ass_path_escaped = str(ass_path).replace("\\", "/").replace(":", "\\:")
         
+        # Get fonts directory from config
+        fonts_dir = self.config.fonts_dir.resolve()
+        fonts_dir_escaped = str(fonts_dir).replace("\\", "/").replace(":", "\\:")
+        
         filter_complex = (
             # Create blurred background
             f"[0:v]scale={w}:{h}:force_original_aspect_ratio=increase,"
@@ -144,8 +148,8 @@ class FFmpegPipeline:
             f"[0:v]scale={w}:-2:force_original_aspect_ratio=decrease[fg];"
             # Overlay foreground centered on background
             f"[bg][fg]overlay=(W-w)/2:(H-h)/2,"
-            # Burn subtitles
-            f"ass='{ass_path_escaped}'[outv]"
+            # Burn subtitles with fonts dir
+            f"ass='{ass_path_escaped}':fontsdir='{fonts_dir_escaped}'[outv]"
         )
         
         cmd = [

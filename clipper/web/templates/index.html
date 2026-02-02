@@ -140,6 +140,15 @@
                         <input type="number" id="max-length" class="number-input" value="60" min="15" max="120">
                         <span class="unit">sec</span>
                     </div>
+                    <div class="option-card" style="grid-column: span 2;">
+                        <label class="option-label">Caption Font</label>
+                        <select id="font-select" class="select-input">
+                            <option value="Komika Axis">Komika Axis</option>
+                        </select>
+                        <div class="font-preview" id="font-preview">
+                            <span style="font-size: 24px;">SAMPLE TEXT Preview</span>
+                        </div>
+                    </div>
                 </div>
                 <button class="btn-primary btn-large" id="process-btn">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -151,7 +160,15 @@
 
             <!-- Progress Section -->
             <section class="progress-section card hidden" id="progress-section">
-                <h3 class="section-title">PROCESSING</h3>
+                <div class="section-header">
+                    <h3 class="section-title">PROCESSING</h3>
+                    <button class="btn-danger" id="stop-btn" style="padding: 0.5rem 1rem;">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                            <rect x="6" y="6" width="12" height="12" rx="2" />
+                        </svg>
+                        <span>Stop</span>
+                    </button>
+                </div>
                 <div class="progress-container">
                     <div class="progress-stage" id="progress-stage">Initializing...</div>
                     <div class="progress-bar">
@@ -166,6 +183,16 @@
             <section class="results-section card hidden" id="results-section">
                 <h3 class="section-title">GENERATED CLIPS</h3>
                 <div class="clips-grid" id="clips-grid"></div>
+            </section>
+
+            <!-- Job History Section -->
+            <section class="history-section card hidden" id="history-section">
+                <div class="section-header">
+                    <h3 class="section-title">JOB HISTORY</h3>
+                    <button class="btn-secondary" id="clear-history-btn"
+                        style="padding: 0.25rem 0.75rem; font-size: 0.8rem; opacity: 0.8;">Clear History</button>
+                </div>
+                <div class="history-list" id="history-list"></div>
             </section>
         </main>
 
@@ -221,6 +248,71 @@
                 <div class="modal-footer">
                     <button class="btn-secondary" id="settings-cancel">Cancel</button>
                     <button class="btn-primary" id="settings-save">Save Settings</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Clip Details Modal -->
+        <div class="modal-overlay hidden" id="details-modal">
+            <div class="modal card" style="max-width: 600px;">
+                <div class="modal-header">
+                    <h3>Clip Details & Metadata</h3>
+                    <button class="btn-icon modal-close" id="details-close">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M18 6L6 18M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+                <div class="modal-body">
+                    <div class="setting-group">
+                        <label class="setting-label">VIRAL TITLE</label>
+                        <div class="copy-input-group" style="display: flex; gap: 10px;">
+                            <input type="text" id="clip-title" class="text-input" readonly
+                                style="flex: 1; min-width: 0;">
+                            <button class="btn-secondary" id="copy-title-btn" title="Copy Title"
+                                style="padding: 0 10px; display: flex; align-items: center; justify-content: center;">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2">
+                                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="setting-group">
+                        <label class="setting-label">DESCRIPTION</label>
+                        <div class="copy-input-group" style="display: flex; gap: 10px; align-items: flex-start;">
+                            <textarea id="clip-description" class="text-input" readonly
+                                style="flex: 1; min-height: 100px; resize: vertical; min-width: 0;"></textarea>
+                            <button class="btn-secondary" id="copy-description-btn" title="Copy Description"
+                                style="height: 40px; padding: 0 10px; display: flex; align-items: center; justify-content: center;">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2">
+                                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="setting-group">
+                        <label class="setting-label">HASHTAGS</label>
+                        <div class="copy-input-group" style="display: flex; gap: 10px;">
+                            <input type="text" id="clip-hashtags" class="text-input" readonly
+                                style="flex: 1; min-width: 0;">
+                            <button class="btn-secondary" id="copy-hashtags-btn" title="Copy Hashtags"
+                                style="padding: 0 10px; display: flex; align-items: center; justify-content: center;">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2">
+                                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn-primary" id="details-close-btn" style="width: 100%;">Close</button>
                 </div>
             </div>
         </div>

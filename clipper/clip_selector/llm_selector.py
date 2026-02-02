@@ -52,6 +52,9 @@ class ClipCandidate:
     hook: str
     virality_score: float
     reason: str
+    title: str = ""
+    description: str = ""
+    hashtags: List[str] = None
 
 
 CLIP_SELECTION_PROMPT = '''You are a viral content analyst. Given a video transcript with timestamps, identify the most engaging segments for short-form content (15-60 seconds).
@@ -77,6 +80,12 @@ SELECTION CRITERIA:
 - Actionable tips or insights
 - Controversial or debate-worthy statements
 
+VIRAL METADATA GENERATION:
+For each selected clip, generate:
+1. A catchy, clickbait-style TITLE (max 50 chars)
+2. A compelling DESCRIPTION (max 200 chars) that encourages watching
+3. 3-5 relevant, high-traffic HASHTAGS
+
 OUTPUT FORMAT:
 {{
   "clips": [
@@ -85,7 +94,10 @@ OUTPUT FORMAT:
       "end": <float>,
       "hook": "<one-line hook for this clip>",
       "virality_score": <1-10>,
-      "reason": "<why this segment is engaging>"
+      "reason": "<why this segment is engaging>",
+      "title": "<viral title>",
+      "description": "<viral description>",
+      "hashtags": ["#tag1", "#tag2", "#tag3"]
     }}
   ]
 }}
@@ -227,9 +239,13 @@ class LLMClipSelector:
                     temperature=0.7
                 )
             elif self.provider == "gemini":
+                # Ensure JSON mode for gemini
                 response = client.models.generate_content(
                     model=self.config.llm_model,
-                    contents=prompt
+                    contents=prompt,
+                    config=genai.types.GenerateContentConfig(
+                        response_mime_type="application/json"
+                    )
                 )
                 result = response.text
             else:
@@ -248,6 +264,17 @@ class LLMClipSelector:
                 border_style="green"
             ))
             console.print()
+            
+            # Log to file
+            try:
+                from datetime import datetime
+                log_dir = self.config.output_dir / ".debug_logs"
+                log_dir.mkdir(parents=True, exist_ok=True)
+                log_file = log_dir / "llm_selector.log"
+                with open(log_file, "a") as f:
+                    f.write(f"\n{'='*50}\nTIMESTAMP: {datetime.now()}\nTYPE: CLIP_SELECTION\nPROMPT:\n{prompt}\n{'-'*20}\nRESPONSE:\n{result}\n{'='*50}\n")
+            except Exception:
+                pass
             
             return result
                 
@@ -287,12 +314,20 @@ class LLMClipSelector:
         
         for clip_data in data.get("clips", []):
             try:
+                # Handle hashtags list properly
+                hashtags = clip_data.get("hashtags", [])
+                if isinstance(hashtags, str):
+                    hashtags = [t.strip() for t in hashtags.split(',')]
+                
                 clip = ClipCandidate(
                     start=float(clip_data["start"]),
                     end=float(clip_data["end"]),
                     hook=str(clip_data.get("hook", "")),
                     virality_score=float(clip_data.get("virality_score", 5)),
-                    reason=str(clip_data.get("reason", ""))
+                    reason=str(clip_data.get("reason", "")),
+                    title=str(clip_data.get("title", "")),
+                    description=str(clip_data.get("description", "")),
+                    hashtags=hashtags or []
                 )
                 clips.append(clip)
             except (KeyError, ValueError) as e:

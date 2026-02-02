@@ -728,3 +728,107 @@ body {
     border-radius: var(--radius-sm);
     font-size: 12px;
 }
+
+/* Font Preview */
+.font-preview {
+    margin-top: 8px;
+    padding: 16px;
+    background: var(--bg-base);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    text-align: center;
+    color: var(--text-primary);
+    font-weight: bold;
+    text-transform: uppercase;
+}
+
+/* Section Header with Actions */
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.section-header .section-title {
+    margin-bottom: 0;
+}
+
+/* Danger Button */
+.btn-danger {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    background: #DC2626;
+    border: none;
+    border-radius: var(--radius-md);
+    color: #FFFFFF;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background var(--duration) var(--ease-out);
+}
+
+.btn-danger:hover {
+    background: #B91C1C;
+}
+
+/* History Section */
+.history-section {
+    margin-top: 24px;
+}
+
+.history-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.history-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background: var(--bg-base);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+}
+
+.history-item-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.history-item-title {
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.history-item-meta {
+    font-size: 12px;
+    color: var(--text-tertiary);
+}
+
+.history-item-status {
+    padding: 4px 8px;
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.history-item-status.complete {
+    background: #10B981;
+    color: white;
+}
+
+.history-item-status.error,
+.history-item-status.stopped {
+    background: #EF4444;
+    color: white;
+}
+
+.history-item-status.processing {
+    background: var(--accent);
+    color: white;
+}

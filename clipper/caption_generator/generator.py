@@ -226,23 +226,29 @@ class CaptionGenerator:
             result = self._client.generate(
                 prompt=prompt,
                 model=self.config.llm_model,
-                temperature=0.5
+                temperature=0.5,
+                max_tokens=8192
             )
         elif self.config.llm_provider == "gemini":
             response = self._client.models.generate_content(
                 model=self.config.llm_model,
-                contents=prompt
+                contents=prompt,
+                config=genai.types.GenerateContentConfig(
+                    max_output_tokens=8192,
+                    response_mime_type="application/json"
+                )
             )
             result = response.text
         else:
             response = self._client.chat.completions.create(
                 model=self.config.openai_model,
                 messages=[{"role": "user", "content": prompt}],
-                temperature=0.5
+                temperature=0.5,
+                max_tokens=4096
             )
             result = response.choices[0].message.content
         
-        # Log the response
+        # Log the response to console
         console.print(Panel(
             Syntax(result[:800] + "..." if len(result) > 800 else result, 
                    "json", theme="monokai", word_wrap=True),
@@ -251,6 +257,16 @@ class CaptionGenerator:
         ))
         console.print()
         
+        # Log to file
+        try:
+            log_dir = self.config.output_dir / ".debug_logs"
+            log_dir.mkdir(parents=True, exist_ok=True)
+            log_file = log_dir / "llm_calibration.log"
+            with open(log_file, "a") as f:
+                f.write(f"\n{'='*50}\nTIMESTAMP: {datetime.now()}\nTYPE: CAPTION_GENERATION\nPROMPT:\n{prompt}\n{'-'*20}\nRESPONSE:\n{result}\n{'='*50}\n")
+        except Exception:
+            pass
+            
         return result
     
     def _parse_response(self, response: str) -> List[Caption]:

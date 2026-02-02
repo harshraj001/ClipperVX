@@ -44,14 +44,20 @@
         clipsCount: $('#clips-count'),
         minLength: $('#min-length'),
         maxLength: $('#max-length'),
+        fontSelect: $('#font-select'),
+        fontPreview: $('#font-preview'),
         processBtn: $('#process-btn'),
         progressSection: $('#progress-section'),
         progressStage: $('#progress-stage'),
         progressFill: $('#progress-fill'),
         progressPercent: $('#progress-percent'),
         progressLog: $('#progress-log'),
+        stopBtn: $('#stop-btn'),
         resultsSection: $('#results-section'),
         clipsGrid: $('#clips-grid'),
+        historySection: $('#history-section'),
+        historyList: $('#history-list'),
+        clearHistoryBtn: $('#clear-history-btn'),
         themeToggle: $('#theme-toggle'),
         settingsBtn: $('#settings-btn'),
         settingsModal: $('#settings-modal'),
@@ -69,7 +75,16 @@
         antigravityAuthBtn: $('#antigravity-auth-btn'),
         authStatus: $('#auth-status'),
         providerHint: $('#provider-hint'),
-        connectionStatus: $('#connection-status')
+        connectionStatus: $('#connection-status'),
+        detailsModal: $('#details-modal'),
+        detailsClose: $('#details-close'),
+        detailsCloseBtn: $('#details-close-btn'),
+        clipTitle: $('#clip-title'),
+        clipDescription: $('#clip-description'),
+        clipHashtags: $('#clip-hashtags'),
+        copyTitleBtn: $('#copy-title-btn'),
+        copyDescriptionBtn: $('#copy-description-btn'),
+        copyHashtagsBtn: $('#copy-hashtags-btn')
     };
 
     // Initialize
@@ -90,6 +105,12 @@
         // Load models for selected provider
         loadModels(state.settings.llmProvider);
         updateProviderUI(state.settings.llmProvider);
+
+        // Load available fonts
+        loadFonts();
+
+        // Load job history
+        loadJobHistory();
 
         // Event listeners
         elements.tabs.forEach(tab => {
@@ -128,6 +149,83 @@
         if (elements.antigravityAuthBtn) {
             elements.antigravityAuthBtn.addEventListener('click', authenticateAntigravity);
         }
+
+        // Font preview update
+        if (elements.fontSelect) {
+            elements.fontSelect.addEventListener('change', updateFontPreview);
+        }
+
+        // Stop button
+        if (elements.stopBtn) {
+            elements.stopBtn.addEventListener('click', stopCurrentJob);
+        }
+
+        // Clear history button
+        if (elements.clearHistoryBtn) {
+            elements.clearHistoryBtn.addEventListener('click', clearHistory);
+        }
+
+        // Clip Details Modal listeners
+        if (elements.detailsClose) {
+            elements.detailsClose.addEventListener('click', () => {
+                elements.detailsModal.classList.add('hidden');
+            });
+        }
+        if (elements.detailsCloseBtn) {
+            elements.detailsCloseBtn.addEventListener('click', () => {
+                elements.detailsModal.classList.add('hidden');
+            });
+        }
+        if (elements.detailsModal) {
+            elements.detailsModal.addEventListener('click', (e) => {
+                if (e.target === elements.detailsModal) {
+                    elements.detailsModal.classList.add('hidden');
+                }
+            });
+        }
+
+        // Copy buttons
+        if (elements.copyTitleBtn) {
+            elements.copyTitleBtn.addEventListener('click', () => copyToClipboard(elements.clipTitle, elements.copyTitleBtn));
+        }
+        if (elements.copyDescriptionBtn) {
+            elements.copyDescriptionBtn.addEventListener('click', () => copyToClipboard(elements.clipDescription, elements.copyDescriptionBtn));
+        }
+        if (elements.copyHashtagsBtn) {
+            elements.copyHashtagsBtn.addEventListener('click', () => copyToClipboard(elements.clipHashtags, elements.copyHashtagsBtn));
+        }
+    }
+
+    // Copy helper
+    function copyToClipboard(inputElement, btnElement) {
+        inputElement.select();
+        inputElement.setSelectionRange(0, 99999); // Mobile compatibility
+        navigator.clipboard.writeText(inputElement.value).then(() => {
+            const originalIcon = btnElement.innerHTML;
+            btnElement.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+            setTimeout(() => {
+                btnElement.innerHTML = originalIcon;
+            }, 1500);
+        });
+    }
+
+    // Show clip details modal
+    // Show clip details modal
+    function showClipDetails(clip) {
+        elements.clipTitle.value = clip.title || 'Generating title... (or generation failed)';
+        elements.clipDescription.value = clip.description || 'Generating description...';
+
+        let hashtags = '';
+        if (Array.isArray(clip.hashtags) && clip.hashtags.length > 0) {
+            hashtags = clip.hashtags.join(' ');
+        } else if (typeof clip.hashtags === 'string' && clip.hashtags.length > 0) {
+            hashtags = clip.hashtags;
+        } else {
+            hashtags = '#viral #shorts';
+        }
+        elements.clipHashtags.value = hashtags;
+
+        elements.detailsModal.classList.remove('hidden');
     }
 
     async function checkAntigravityAuth() {
@@ -429,6 +527,7 @@
         elements.progressLog.innerHTML = '';
         elements.progressFill.style.width = '0%';
         elements.progressPercent.textContent = '0%';
+        if (elements.stopBtn) elements.stopBtn.style.display = '';
 
         try {
             const payload = {
@@ -439,7 +538,9 @@
                 openai_key: state.settings.openaiKey,
                 llm_provider: state.settings.llmProvider,
                 llm_model: state.settings.llmModel,
-                video_id: state.videoInfo.video_id
+                video_id: state.videoInfo.video_id,
+                title: state.videoInfo.title || 'Video',
+                font: elements.fontSelect ? elements.fontSelect.value : 'Komika Axis'
             };
 
             if (state.isLocalFile) {
@@ -499,11 +600,23 @@
                 } else if (data.status === 'error') {
                     clearInterval(state.pollingInterval);
                     showError(data.error);
+                } else if (data.status === 'stopped') {
+                    clearInterval(state.pollingInterval);
+                    console.log('Job stopped');
                 }
             } catch (e) {
                 console.error('Polling error:', e);
             }
         }, 1000);
+    }
+
+    function stopPolling() {
+        if (state.pollingInterval) {
+            clearInterval(state.pollingInterval);
+            state.pollingInterval = null;
+        }
+        elements.processBtn.disabled = false;
+        elements.processBtn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg><span>Generate Clips</span>';
     }
 
     function updateProgress(stage, percent) {
@@ -522,6 +635,8 @@
         elements.processBtn.disabled = false;
         elements.processBtn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg><span>Generate Clips</span>';
 
+        // Hide progress and show results
+        elements.progressSection.classList.add('hidden');
         elements.resultsSection.classList.remove('hidden');
         elements.clipsGrid.innerHTML = '';
 
@@ -538,10 +653,16 @@
                     <div class="clip-name" title="${clip.filename}">${clip.filename}</div>
                     <div class="clip-hook">${clip.hook || ''}</div>
                 </div>
-                <div class="clip-actions">
-                    <a href="/output/${relativePath}" download="${clip.filename}" class="btn-secondary">Download</a>
+                <div class="clip-actions" style="display: flex; gap: 8px;">
+                    <button class="btn-primary view-details-btn" style="flex: 1;">Clip Details</button>
+                    <a href="/output/${relativePath}" download="${clip.filename}" class="btn-secondary" style="flex: 1; text-align: center;">Download</a>
                 </div>
             `;
+
+            // Add listener
+            const detailsBtn = card.querySelector('.view-details-btn');
+            detailsBtn.addEventListener('click', () => showClipDetails(clip));
+
             elements.clipsGrid.appendChild(card);
         });
 
@@ -557,6 +678,183 @@
         elements.processBtn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg><span>Generate Clips</span>';
         addLog('❌ Error: ' + message);
         alert('Error: ' + message);
+    }
+
+    // Load available fonts
+    async function loadFonts() {
+        try {
+            const response = await fetch('/api/fonts');
+            const data = await response.json();
+
+            if (elements.fontSelect && data.fonts) {
+                elements.fontSelect.innerHTML = '';
+
+                // Create style element for fonts
+                let fontCss = '';
+
+                data.fonts.forEach(font => {
+                    if (font.available) {
+                        const option = document.createElement('option');
+                        option.value = font.name;
+                        option.textContent = font.name;
+                        elements.fontSelect.appendChild(option);
+
+                        // Add font-face rule
+                        if (font.path) {
+                            fontCss += `
+                                @font-face {
+                                    font-family: '${font.name}';
+                                    src: url('${font.path}');
+                                }
+                            `;
+                        }
+                    }
+                });
+
+                // Inject font styles
+                if (fontCss) {
+                    const style = document.createElement('style');
+                    style.textContent = fontCss;
+                    document.head.appendChild(style);
+                }
+
+                // Set saved font
+                const savedFont = localStorage.getItem('caption_font');
+                if (savedFont) {
+                    elements.fontSelect.value = savedFont;
+                }
+
+                updateFontPreview();
+            }
+        } catch (e) {
+            console.error('Failed to load fonts:', e);
+        }
+    }
+
+    // Update font preview
+    function updateFontPreview() {
+        if (elements.fontSelect && elements.fontPreview) {
+            const selectedFont = elements.fontSelect.value;
+            localStorage.setItem('caption_font', selectedFont);
+            elements.fontPreview.innerHTML = `<span style="font-family: '${selectedFont}', sans-serif; font-size: 24px;">SAMPLE TEXT Preview</span>`;
+        }
+    }
+
+    // Stop current job
+    async function stopCurrentJob() {
+        if (!state.jobId) return;
+
+        try {
+            const response = await fetch(`/api/job/${state.jobId}/stop`, { method: 'POST' });
+            const data = await response.json();
+
+            if (data.status === 'stopped') {
+                addLog('🛑 Job stopped by user');
+                stopPolling();
+                elements.progressStage.textContent = 'Stopped';
+                if (elements.stopBtn) {
+                    elements.stopBtn.style.display = 'none';
+                }
+            }
+        } catch (e) {
+            console.error('Failed to stop job:', e);
+        }
+    }
+
+    async function clearHistory() {
+        if (!confirm('Are you sure you want to clear your job history? This cannot be undone.')) {
+            return;
+        }
+
+        try {
+            const response = await fetch('/api/jobs', { method: 'DELETE' });
+            const data = await response.json();
+
+            if (data.status === 'cleared') {
+                elements.historySection.classList.add('hidden');
+                elements.historyList.innerHTML = '';
+            }
+        } catch (e) {
+            console.error('Failed to clear history:', e);
+            alert('Failed to clear history');
+        }
+    }
+
+    // Load job history
+    async function loadJobHistory() {
+        try {
+            const response = await fetch('/api/jobs');
+            const data = await response.json();
+
+            if (data.jobs && data.jobs.length > 0) {
+                elements.historySection.classList.remove('hidden');
+                elements.historyList.innerHTML = '';
+
+                // Sort by created time descending
+                const sortedJobs = data.jobs.sort((a, b) => (b.created || 0) - (a.created || 0));
+
+                // Show recent 5 jobs
+                sortedJobs.slice(0, 5).forEach(job => {
+                    const item = document.createElement('div');
+                    item.className = 'history-item';
+
+                    const created = job.created ? new Date(job.created * 1000).toLocaleString() : 'Unknown';
+
+                    let statusText = job.status;
+                    if (job.status === 'processing' && job.progress !== undefined) {
+                        statusText = `Processing (${Math.round(job.progress)}%)`;
+                    }
+
+                    item.innerHTML = `
+                        <div class="history-item-info">
+                            <div class="history-item-title">${job.title || job.video_id || job.id}</div>
+                            <div class="history-item-meta">${created} • Font: ${job.font || 'Default'}</div>
+                        </div>
+                        <span class="history-item-status ${job.status}">${statusText}</span>
+                    `;
+
+                    // Click to view results if complete
+                    if (job.status === 'complete' && job.clips) {
+                        item.style.cursor = 'pointer';
+                        item.addEventListener('click', () => {
+                            showResults(job.clips, job.errors || [], job.video_id);
+                            elements.resultsSection.scrollIntoView({ behavior: 'smooth' });
+                        });
+                    }
+
+                    // Click to resume monitoring if processing
+                    if (job.status === 'processing' || job.status === 'started') {
+                        item.style.cursor = 'pointer';
+                        item.title = "Click to view progress";
+                        item.addEventListener('click', () => {
+                            state.jobId = job.id;
+                            state.videoInfo = {
+                                video_id: job.video_id,
+                                title: job.title
+                            };
+
+                            // Restore UI state
+                            elements.progressSection.classList.remove('hidden');
+                            elements.resultsSection.classList.add('hidden');
+                            elements.optionsSection.classList.add('hidden');
+                            elements.optionsSection.classList.add('hidden');
+                            elements.processBtn.disabled = true;
+                            elements.processBtn.innerHTML = '<span class="spinner"></span> Processing...';
+                            if (elements.stopBtn) elements.stopBtn.style.display = '';
+
+                            elements.progressSection.scrollIntoView({ behavior: 'smooth' });
+                            startPolling();
+                        });
+                    }
+
+                    elements.historyList.appendChild(item);
+                });
+            } else {
+                elements.historySection.classList.add('hidden');
+            }
+        } catch (e) {
+            console.error('Failed to load job history:', e);
+        }
     }
 
     document.addEventListener('DOMContentLoaded', init);

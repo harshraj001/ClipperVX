@@ -31,11 +31,21 @@ AVAILABLE_MODELS = {
 }
 
 
+# Available fonts (name -> file path relative to fonts/)
+AVAILABLE_FONTS = {
+    "Impact": "Impact-Font/impact.ttf",
+    "Luckiest Guy": "Luckiest_Guy/LuckiestGuy-Regular.ttf",
+    "Badaboom BB": "badaboom_bb/BADABB__.TTF",
+    "Bangers": "bangers/Bangers.ttf",
+    "Komika Axis": "komika_axis/KOMIKAX_.ttf",
+}
+
+
 @dataclass
 class CaptionStyle:
     """Caption styling configuration."""
     font: str = "Komika Axis"
-    fontsize: int = 72
+    fontsize: int = 96  # Increased from 72 for better visibility
     color: str = "&H00FFFFFF"
     outline_color: str = "&H00000000"
     outline_width: int = 4
@@ -50,6 +60,7 @@ class Config:
     # Directories
     output_dir: Path = field(default_factory=lambda: Path("./output"))
     temp_dir: Path = field(default_factory=lambda: Path("./temp"))
+    fonts_dir: Path = field(default_factory=lambda: Path("./fonts"))
     
     # Video settings
     target_width: int = 1080
