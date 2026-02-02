@@ -239,6 +239,7 @@ class LLMClipSelector:
                     temperature=0.7
                 )
             elif self.provider == "gemini":
+                from google import genai
                 # Ensure JSON mode for gemini
                 response = client.models.generate_content(
                     model=self.config.llm_model,

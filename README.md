@@ -148,9 +148,31 @@ min_clip_length: 15
 max_clip_length: 60
 
 # Caption styling
-caption_font: "Komika Axis"
-caption_fontsize: 72
+caption_font: "Luckiest Guy"
+caption_fontsize: 96
+caption_margin_v: 500
 ```
+
+### Custom Fonts
+
+Place `.ttf` or `.otf` font files in the `fonts/` directory. Each font should be in its own subdirectory:
+
+```
+fonts/
+  ├── Komika_Axis/
+  │   └── komika.ttf
+  └── Luckiest_Guy/
+      └── luckiest.ttf
+```
+
+These will automatically appear in the font dropdown in the Web GUI settings.
+
+### Viral Metadata
+
+After processing, click "View Details" on any generated clip to:
+- Copy the AI-generated **Viral Title**
+- Copy the engaging **Description**
+- Copy optimized **Hashtags**
 
 ## 🔧 Development
 

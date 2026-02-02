@@ -18,6 +18,9 @@ class ClipCandidate:
     hook: str
     virality_score: float
     reason: str
+    title: str = ""
+    description: str = ""
+    hashtags: list = None
 
 
 # Keywords that indicate engaging content
@@ -252,7 +255,10 @@ class HeuristicSelector:
                     end=end,
                     hook=hook,
                     virality_score=min(10, score * 10),
-                    reason=reason
+                    reason=reason,
+                    title=f"Clip: {self._generate_hook(text)}",
+                    description=f"Engaging segment from {start:.1f}s to {end:.1f}s",
+                    hashtags=["#highlight", "#viral", "#video"]
                 ))
         
         return selected
