@@ -39,7 +39,7 @@ class Config:
     
     # LLM settings
     llm_provider: Literal["gemini", "openai"] = "gemini"
-    llm_model: str = "gemini-2.5-flash"
+    llm_model: str = "gemma-3-12b-it"
     openai_model: str = "gpt-4o-mini"
     
     # Whisper settings
