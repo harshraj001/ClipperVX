@@ -13,33 +13,60 @@ from ..utils import get_logger
 logger = get_logger(__name__)
 
 
+def _extract_json_object(text: str) -> str:
+    """Extract the outermost balanced JSON object from text."""
+    start_idx = text.find('{')
+    if start_idx == -1:
+        return text
+    
+    brace_count = 0
+    in_string = False
+    escape_next = False
+    
+    for i, char in enumerate(text[start_idx:], start=start_idx):
+        if escape_next:
+            escape_next = False
+            continue
+        if char == '\\':
+            escape_next = True
+            continue
+        if char == '"' and not escape_next:
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if char == '{':
+            brace_count += 1
+        elif char == '}':
+            brace_count -= 1
+            if brace_count == 0:
+                return text[start_idx:i+1]
+    
+    return text[start_idx:]
+
+
 def _repair_json(json_str: str) -> str:
     """Attempt to repair truncated JSON by closing open brackets/braces."""
-    # Count open brackets
+    json_str = _extract_json_object(json_str)
+    
     open_braces = json_str.count('{') - json_str.count('}')
     open_brackets = json_str.count('[') - json_str.count(']')
     
-    # Try to find the last complete object in an array
     if open_braces > 0 or open_brackets > 0:
-        # Find the last complete caption entry (ends with })
         last_complete = json_str.rfind('}')
         if last_complete > 0:
-            # Check if there's an incomplete entry after it
             after_last = json_str[last_complete+1:].strip()
             if after_last.startswith(','):
-                # Truncate at the last complete entry
                 json_str = json_str[:last_complete+1]
-                # Recalculate
                 open_braces = json_str.count('{') - json_str.count('}')
                 open_brackets = json_str.count('[') - json_str.count(']')
     
-    # Close any remaining open structures
     json_str = json_str.rstrip()
     if json_str.endswith(','):
         json_str = json_str[:-1]
     
-    json_str += ']' * open_brackets
-    json_str += '}' * open_braces
+    json_str += ']' * max(0, open_brackets)
+    json_str += '}' * max(0, open_braces)
     
     return json_str
 
@@ -249,21 +276,29 @@ class CaptionGenerator:
             result = response.choices[0].message.content
         
         # Log the response to console
+        response_len = len(result)
         console.print(Panel(
-            Syntax(result[:800] + "..." if len(result) > 800 else result, 
+            Syntax(result[:800] + "..." if response_len > 800 else result, 
                    "json", theme="monokai", word_wrap=True),
-            title="LLM Response",
+            title=f"LLM Response ({response_len} chars)",
             border_style="green"
         ))
         console.print()
         
-        # Log to file
+        # Log COMPLETE response to file for debugging
         try:
             log_dir = self.config.output_dir / ".debug_logs"
             log_dir.mkdir(parents=True, exist_ok=True)
             log_file = log_dir / "llm_calibration.log"
             with open(log_file, "a") as f:
-                f.write(f"\n{'='*50}\nTIMESTAMP: {datetime.now()}\nTYPE: CAPTION_GENERATION\nPROMPT:\n{prompt}\n{'-'*20}\nRESPONSE:\n{result}\n{'='*50}\n")
+                f.write(f"\n{'='*80}\n")
+                f.write(f"TIMESTAMP: {datetime.now()}\n")
+                f.write(f"TYPE: CAPTION_GENERATION\n")
+                f.write(f"MODEL: {self.config.llm_model}\n")
+                f.write(f"RESPONSE_LENGTH: {response_len} chars\n")
+                f.write(f"{'-'*40}\nPROMPT:\n{prompt}\n")
+                f.write(f"{'-'*40}\nCOMPLETE RESPONSE:\n{result}\n")
+                f.write(f"{'='*80}\n")
         except Exception:
             pass
             

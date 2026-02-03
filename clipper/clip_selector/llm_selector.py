@@ -13,35 +13,140 @@ from ..utils.validators import validate_timestamps, validate_no_overlap
 logger = get_logger(__name__)
 
 
+def _extract_json_object(text: str) -> str:
+    """Extract the outermost balanced JSON object from text."""
+    # Find the first opening brace
+    start_idx = text.find('{')
+    if start_idx == -1:
+        return text
+    
+    # Track brace balance to find the matching closing brace
+    brace_count = 0
+    in_string = False
+    escape_next = False
+    
+    for i, char in enumerate(text[start_idx:], start=start_idx):
+        if escape_next:
+            escape_next = False
+            continue
+        
+        if char == '\\':
+            escape_next = True
+            continue
+        
+        if char == '"' and not escape_next:
+            in_string = not in_string
+            continue
+        
+        if in_string:
+            continue
+        
+        if char == '{':
+            brace_count += 1
+        elif char == '}':
+            brace_count -= 1
+            if brace_count == 0:
+                return text[start_idx:i+1]
+    
+    # If we get here, the JSON is incomplete - return what we have
+    return text[start_idx:]
+
+
 def _repair_json(json_str: str) -> str:
-    """Attempt to repair truncated JSON by closing open brackets/braces."""
-    # Count open brackets
+    """Attempt to repair truncated or malformed JSON."""
+    # First, extract the JSON object
+    json_str = _extract_json_object(json_str)
+    
+    # Remove trailing content after what looks like a complete clips array
+    # Find the clips array and try to close it properly
+    clips_match = re.search(r'"clips"\s*:\s*\[', json_str)
+    if clips_match:
+        # Find all complete objects within the clips array
+        clip_start = clips_match.end()
+        
+        # Track the last position of a complete clip object
+        last_complete_pos = clip_start
+        brace_depth = 0
+        bracket_depth = 1  # We're inside the clips array
+        in_string = False
+        escape_next = False
+        
+        for i, char in enumerate(json_str[clip_start:], start=clip_start):
+            if escape_next:
+                escape_next = False
+                continue
+            if char == '\\':
+                escape_next = True
+                continue
+            if char == '"' and not escape_next:
+                in_string = not in_string
+                continue
+            if in_string:
+                continue
+            
+            if char == '{':
+                brace_depth += 1
+            elif char == '}':
+                brace_depth -= 1
+                if brace_depth == 0 and bracket_depth == 1:
+                    # We just closed a clip object
+                    last_complete_pos = i + 1
+            elif char == '[':
+                bracket_depth += 1
+            elif char == ']':
+                bracket_depth -= 1
+                if bracket_depth == 0:
+                    # Clips array properly closed
+                    last_complete_pos = i + 1
+                    break
+        
+        # Truncate at the last complete position and close properly
+        json_str = json_str[:last_complete_pos].rstrip()
+        
+        # Remove trailing comma if present
+        if json_str.endswith(','):
+            json_str = json_str[:-1]
+    
+    # Count and close remaining brackets/braces
     open_braces = json_str.count('{') - json_str.count('}')
     open_brackets = json_str.count('[') - json_str.count(']')
     
-    # Try to find the last complete object in an array
-    if open_braces > 0 or open_brackets > 0:
-        # Find the last complete entry (ends with })
-        last_complete = json_str.rfind('}')
-        if last_complete > 0:
-            # Check if there's an incomplete entry after it
-            after_last = json_str[last_complete+1:].strip()
-            if after_last.startswith(','):
-                # Truncate at the last complete entry
-                json_str = json_str[:last_complete+1]
-                # Recalculate
-                open_braces = json_str.count('{') - json_str.count('}')
-                open_brackets = json_str.count('[') - json_str.count(']')
-    
-    # Close any remaining open structures
     json_str = json_str.rstrip()
     if json_str.endswith(','):
         json_str = json_str[:-1]
     
-    json_str += ']' * open_brackets
-    json_str += '}' * open_braces
+    json_str += ']' * max(0, open_brackets)
+    json_str += '}' * max(0, open_braces)
     
     return json_str
+
+
+def _extract_clips_fallback(text: str) -> list:
+    """Last-resort fallback: extract individual clip objects using regex."""
+    clips = []
+    
+    # Pattern to match individual clip objects
+    clip_pattern = re.compile(
+        r'\{\s*"start"\s*:\s*([0-9.]+)\s*,\s*"end"\s*:\s*([0-9.]+)[^}]*?"hook"\s*:\s*"([^"]*)"[^}]*?"virality_score"\s*:\s*([0-9]+)',
+        re.DOTALL
+    )
+    
+    for match in clip_pattern.finditer(text):
+        try:
+            clips.append({
+                "start": float(match.group(1)),
+                "end": float(match.group(2)),
+                "hook": match.group(3),
+                "virality_score": int(match.group(4)),
+                "reason": "",
+                "title": "",
+                "description": "",
+                "hashtags": []
+            })
+        except (ValueError, IndexError):
+            continue
+    
+    return clips
 
 
 @dataclass
@@ -236,7 +341,8 @@ class LLMClipSelector:
                 result = client.generate(
                     prompt=prompt,
                     model=self.config.llm_model,
-                    temperature=0.7
+                    temperature=0.7,
+                    max_tokens=16384  # Large enough for 10 clips with full metadata
                 )
             elif self.provider == "gemini":
                 from google import genai
@@ -258,22 +364,30 @@ class LLMClipSelector:
                 result = response.choices[0].message.content
             
             # Log the response
+            response_len = len(result)
             console.print(Panel(
-                Syntax(result[:1000] + "..." if len(result) > 1000 else result, 
+                Syntax(result[:1000] + "..." if response_len > 1000 else result, 
                        "json", theme="monokai", word_wrap=True),
-                title="LLM Response",
+                title=f"LLM Response ({response_len} chars)",
                 border_style="green"
             ))
             console.print()
             
-            # Log to file
+            # Log COMPLETE response to file for debugging
             try:
                 from datetime import datetime
                 log_dir = self.config.output_dir / ".debug_logs"
                 log_dir.mkdir(parents=True, exist_ok=True)
                 log_file = log_dir / "llm_selector.log"
                 with open(log_file, "a") as f:
-                    f.write(f"\n{'='*50}\nTIMESTAMP: {datetime.now()}\nTYPE: CLIP_SELECTION\nPROMPT:\n{prompt}\n{'-'*20}\nRESPONSE:\n{result}\n{'='*50}\n")
+                    f.write(f"\n{'='*80}\n")
+                    f.write(f"TIMESTAMP: {datetime.now()}\n")
+                    f.write(f"TYPE: CLIP_SELECTION\n")
+                    f.write(f"MODEL: {self.config.llm_model}\n")
+                    f.write(f"RESPONSE_LENGTH: {response_len} chars\n")
+                    f.write(f"{'-'*40}\nPROMPT:\n{prompt}\n")
+                    f.write(f"{'-'*40}\nCOMPLETE RESPONSE:\n{result}\n")
+                    f.write(f"{'='*80}\n")
             except Exception:
                 pass
             
@@ -286,30 +400,41 @@ class LLMClipSelector:
     
     def _parse_response(self, response: str) -> List[ClipCandidate]:
         """Parse LLM response into ClipCandidate objects."""
+        original_response = response
+        
         # Clean response - remove markdown code blocks if present
         response = response.strip()
         response = re.sub(r'^```json\s*', '', response)
         response = re.sub(r'^```\s*', '', response)
         response = re.sub(r'\s*```$', '', response)
         
-        # Try to find JSON object in response (for thinking models that include reasoning)
-        json_match = re.search(r'\{[\s\S]*"clips"[\s\S]*\}', response)
-        if json_match:
-            response = json_match.group(0)
+        # Use the robust JSON extraction instead of greedy regex
+        response = _extract_json_object(response)
         
+        data = None
+        
+        # Try direct parse first
         try:
             data = json.loads(response)
         except json.JSONDecodeError as e:
-            # Try to repair truncated JSON
             logger.warning(f"Initial JSON parse failed: {e}, attempting repair...")
+            
+            # Try repair
             try:
                 repaired = _repair_json(response)
                 data = json.loads(repaired)
                 logger.info("JSON repair successful")
             except json.JSONDecodeError as e2:
-                logger.error(f"Failed to parse LLM response even after repair: {e2}")
-                logger.debug(f"Response was: {response[:500]}")
-                return []
+                logger.warning(f"JSON repair failed: {e2}, trying fallback extraction...")
+                
+                # Last resort: regex-based extraction
+                fallback_clips = _extract_clips_fallback(original_response)
+                if fallback_clips:
+                    logger.info(f"Fallback extraction found {len(fallback_clips)} clips")
+                    data = {"clips": fallback_clips}
+                else:
+                    logger.error("All JSON parsing attempts failed")
+                    return []
         
         clips = []
         
