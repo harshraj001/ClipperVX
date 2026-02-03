@@ -167,6 +167,13 @@ class AntigravityClient:
         """Check if we have a valid token."""
         return self.token is not None
     
+    def logout(self):
+        """Delete cached token to log out."""
+        if self.token_path.exists():
+            self.token_path.unlink()
+        self.token = None
+        logger.info("Antigravity session logged out")
+    
     def get_auth_url(self) -> str:
         """Get OAuth authorization URL."""
         params = {

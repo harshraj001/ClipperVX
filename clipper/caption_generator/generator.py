@@ -57,23 +57,23 @@ class Caption:
             self.emphasis_words = []
 
 
-CAPTION_PROMPT = '''You are a short-form video caption specialist. Convert the following transcript segment into punchy, hook-style captions optimized for sound-off viewing.
+CAPTION_PROMPT = '''You are a caption timing specialist. Break the following transcript into readable caption segments.
 
 TRANSCRIPT SEGMENT (timestamps relative to clip start):
 {segment_text}
 
-RULES:
-1. Maximum 6 words per line
-2. Break at natural speech pauses
-3. CAPITALIZE key emotional/action words (2-3 per caption max)
-4. Each caption: 1.5-3 seconds display time
-5. Maintain timing alignment with original transcript
-6. Total captions should cover the entire segment
+CRITICAL RULES:
+1. Use the EXACT WORDS from the transcript - DO NOT paraphrase, summarize, or change any words
+2. Maximum 6 words per caption line
+3. Break at natural speech pauses
+4. Maintain timing alignment within the original start/end times
+5. Cover the ENTIRE transcript - do not skip any words
+6. Mark 1-2 key words per caption for emphasis
 
 OUTPUT FORMAT (JSON only, no markdown):
 {{
   "captions": [
-    {{"start": 0.0, "end": 2.5, "text": "Here's the SECRET", "emphasis_words": ["SECRET"]}},
+    {{"start": 0.0, "end": 2.5, "text": "Here is the secret", "emphasis_words": ["secret"]}},
     {{"start": 2.5, "end": 5.0, "text": "nobody tells you", "emphasis_words": []}}
   ]
 }}

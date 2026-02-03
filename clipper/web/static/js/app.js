@@ -265,9 +265,30 @@
         if (elements.antigravityAuthBtn) {
             const btnText = elements.antigravityAuthBtn.querySelector('#auth-btn-text');
             if (btnText) {
-                btnText.textContent = state.antigravityAuth ?
-                    'Re-authenticate' : 'Authenticate with Google';
+                if (state.antigravityAuth) {
+                    btnText.textContent = 'Disconnect Antigravity';
+                    elements.antigravityAuthBtn.onclick = disconnectAntigravity;
+                } else {
+                    btnText.textContent = 'Authenticate with Google';
+                    elements.antigravityAuthBtn.onclick = authenticateAntigravity;
+                }
             }
+        }
+    }
+
+    async function disconnectAntigravity() {
+        if (!confirm('Disconnect Antigravity account? You can reconnect anytime.')) return;
+
+        try {
+            const response = await fetch('/api/auth/antigravity/logout', { method: 'POST' });
+            const data = await response.json();
+            if (data.status === 'success') {
+                state.antigravityAuth = false;
+                updateAuthUI();
+                addLog('📤 Antigravity account disconnected');
+            }
+        } catch (e) {
+            console.error('Disconnect error:', e);
         }
     }
 
@@ -554,17 +575,37 @@
         if (elements.youtubeAuthBtn && elements.youtubeAuthStatus) {
             if (state.youtubeAuth) {
                 const channelName = state.youtubeChannel ? state.youtubeChannel.title : 'Connected';
-                elements.youtubeAuthBtn.textContent = 'Connected as ' + channelName;
-                elements.youtubeAuthBtn.disabled = true;
+                elements.youtubeAuthBtn.textContent = 'Disconnect (' + channelName + ')';
+                elements.youtubeAuthBtn.disabled = false;
                 elements.youtubeAuthBtn.classList.add('btn-success');
+                elements.youtubeAuthBtn.onclick = disconnectYouTube;
                 elements.youtubeAuthStatus.textContent = 'Ready to upload clips';
                 elements.youtubeAuthStatus.style.color = '#00ff88';
             } else {
                 elements.youtubeAuthBtn.textContent = 'Connect YouTube Account';
                 elements.youtubeAuthBtn.disabled = false;
+                elements.youtubeAuthBtn.classList.remove('btn-success');
+                elements.youtubeAuthBtn.onclick = connectYouTube;
                 elements.youtubeAuthStatus.textContent = 'Link your channel to post clips directly';
                 elements.youtubeAuthStatus.style.color = '';
             }
+        }
+    }
+
+    async function disconnectYouTube() {
+        if (!confirm('Disconnect YouTube account? You can reconnect anytime.')) return;
+
+        try {
+            const response = await fetch('/api/auth/youtube/logout', { method: 'POST' });
+            const data = await response.json();
+            if (data.status === 'success') {
+                state.youtubeAuth = false;
+                state.youtubeChannel = null;
+                updateYouTubeUI();
+                addLog('📤 YouTube account disconnected');
+            }
+        } catch (e) {
+            console.error('Disconnect error:', e);
         }
     }
 
@@ -599,7 +640,7 @@
         btn.textContent = 'Posting...';
 
         try {
-            const response = await fetch('/api/upload', {
+            const response = await fetch('/api/youtube/upload', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -634,7 +675,7 @@
         btn.textContent = 'Scheduling...';
 
         try {
-            const response = await fetch('/api/upload_all', {
+            const response = await fetch('/api/youtube/upload_all', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ job_id: state.jobId })

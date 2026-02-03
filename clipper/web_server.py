@@ -298,7 +298,34 @@ def youtube_status():
         return jsonify({"authenticated": False, "error": str(e)})
 
 
-@app.route('/api/upload', methods=['POST'])
+@app.route('/api/auth/youtube/logout', methods=['POST'])
+def youtube_logout():
+    """Disconnect YouTube account by deleting token."""
+    try:
+        config = Config.load_default()
+        token_path = config.config_dir / "youtube_token.json"
+        if token_path.exists():
+            token_path.unlink()
+        return jsonify({"status": "success"})
+    except Exception as e:
+        logger.error(f"YouTube logout error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/auth/antigravity/logout', methods=['POST'])
+def antigravity_logout():
+    """Disconnect Antigravity account by deleting token."""
+    try:
+        from .llm.antigravity_client import AntigravityClient
+        client = AntigravityClient()
+        client.logout()
+        return jsonify({"status": "success"})
+    except Exception as e:
+        logger.error(f"Antigravity logout error: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/youtube/upload', methods=['POST'])
 def upload_clip():
     """Upload a single clip to YouTube."""
     data = request.json
@@ -340,7 +367,7 @@ def upload_clip():
         return jsonify({"error": str(e)}), 500
 
 
-@app.route('/api/upload_all', methods=['POST'])
+@app.route('/api/youtube/upload_all', methods=['POST'])
 def upload_all_clips():
     """Schedule all clips to YouTube."""
     data = request.json
